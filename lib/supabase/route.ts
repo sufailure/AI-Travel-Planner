@@ -12,9 +12,11 @@ export function createRouteClient(): SupabaseClient<Database> | null {
         return null;
     }
 
-    return createRouteHandlerClient<Database>({
-        cookies,
-        supabaseUrl,
-        supabaseKey,
-    });
+    return createRouteHandlerClient<Database>(
+        { cookies },
+        {
+            supabaseUrl,
+            supabaseKey,
+        },
+    );
 }

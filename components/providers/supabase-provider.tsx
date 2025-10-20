@@ -1,7 +1,7 @@
 'use client';
 
 import { SessionContextProvider } from '@supabase/auth-helpers-react';
-import { createBrowserClient } from '@supabase/auth-helpers-nextjs';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import type { Session } from '@supabase/supabase-js';
 import { useState } from 'react';
 import type { Database } from '@/lib/supabase/types';
@@ -20,7 +20,10 @@ export function SupabaseProvider({ children, initialSession }: SupabaseProviderP
             return null;
         }
 
-        return createBrowserClient<Database>(url, key);
+        return createClientComponentClient<Database>({
+            supabaseUrl: url,
+            supabaseKey: key,
+        });
     });
 
     if (!url || !key || !client) {

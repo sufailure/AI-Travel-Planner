@@ -13,9 +13,11 @@ export function createServerClient(): SupabaseClient<Database> | null {
     }
 
     const cookieStore = cookies();
-    return createServerComponentClient<Database>({
-        cookies: () => cookieStore,
-        supabaseUrl,
-        supabaseKey,
-    });
+    return createServerComponentClient<Database>(
+        { cookies: () => cookieStore },
+        {
+            supabaseUrl,
+            supabaseKey,
+        },
+    );
 }

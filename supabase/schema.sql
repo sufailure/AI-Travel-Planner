@@ -41,8 +41,15 @@ create table if not exists public.itinerary_days (
   unique (itinerary_id, day_index)
 );
 
--- Concrete items within a day
-create type if not exists public.activity_kind as enum ('transport', 'lodging', 'activity', 'meal', 'note');
+do $$
+begin
+  if not exists (
+    select 1 from pg_type where typname = 'activity_kind'
+  ) then
+    create type public.activity_kind as enum ('transport', 'lodging', 'activity', 'meal', 'note');
+  end if;
+end;
+$$;
 
 create table if not exists public.itinerary_items (
   id uuid primary key default gen_random_uuid(),
@@ -74,7 +81,15 @@ create table if not exists public.expenses (
 );
 
 -- Individual expense entries (planned or actual)
-create type if not exists public.expense_source as enum ('plan', 'actual');
+do $$
+begin
+  if not exists (
+    select 1 from pg_type where typname = 'expense_source'
+  ) then
+    create type public.expense_source as enum ('plan', 'actual');
+  end if;
+end;
+$$;
 
 create table if not exists public.expense_entries (
   id uuid primary key default gen_random_uuid(),

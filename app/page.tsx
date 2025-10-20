@@ -17,7 +17,7 @@ export default function HomePage() {
                     即将上线：开始规划
                 </button>
                 <Link
-                    href="/(auth)/signin"
+                    href="/signin"
                     className="rounded-lg border border-slate-700 px-6 py-4 text-center text-base font-medium text-slate-200 transition hover:border-slate-600 hover:text-white"
                 >
                     登录以同步行程
