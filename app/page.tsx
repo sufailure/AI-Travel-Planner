@@ -1,10 +1,10 @@
+import Link from 'next/link';
+
 export default function HomePage() {
     return (
         <main className="flex min-h-screen flex-col items-center justify-center gap-6 px-6 py-16">
             <div className="max-w-3xl text-center">
-                <p className="text-sm uppercase tracking-[0.35em] text-slate-400">
-                    AI Travel Planner
-                </p>
+                <p className="text-sm uppercase tracking-[0.35em] text-slate-400">AI Travel Planner</p>
                 <h1 className="mt-4 text-4xl font-semibold leading-tight text-slate-50 sm:text-5xl">
                     让 AI 帮你规划下一次完美旅行
                 </h1>
@@ -16,9 +16,12 @@ export default function HomePage() {
                 <button className="rounded-lg bg-emerald-500 px-6 py-4 text-base font-medium text-slate-900 shadow transition hover:bg-emerald-400">
                     即将上线：开始规划
                 </button>
-                <button className="rounded-lg border border-slate-700 px-6 py-4 text-base font-medium text-slate-200 transition hover:border-slate-600 hover:text-white">
-                    浏览示例行程 (敬请期待)
-                </button>
+                <Link
+                    href="/(auth)/signin"
+                    className="rounded-lg border border-slate-700 px-6 py-4 text-center text-base font-medium text-slate-200 transition hover:border-slate-600 hover:text-white"
+                >
+                    登录以同步行程
+                </Link>
             </div>
         </main>
     );
