@@ -1,6 +1,4 @@
 import Link from 'next/link';
-
-import Link from 'next/link';
 import type { SupabaseClient, User } from '@supabase/supabase-js';
 import { CreateItineraryForm } from '@/components/dashboard/create-itinerary-form';
 import { createServerClient } from '@/lib/supabase/server';
