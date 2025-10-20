@@ -1,6 +1,8 @@
 import Link from 'next/link';
+import { CalendarRange, MapPin, Plane, Users, Wallet2 } from 'lucide-react';
 import type { SupabaseClient, User } from '@supabase/supabase-js';
 import { CreateItineraryForm } from '@/components/dashboard/create-itinerary-form';
+import { ThemeToggle } from '@/components/theme/theme-toggle';
 import { createServerClient } from '@/lib/supabase/server';
 import type { Database } from '@/lib/supabase/types';
 
@@ -23,18 +25,23 @@ export default async function HomePage() {
     const itineraries = await fetchItineraries(supabase, session.user.id);
 
     return (
-        <main className="mx-auto flex min-h-screen max-w-6xl flex-col gap-10 px-6 py-14">
-            <header className="flex flex-col gap-2">
-                <p className="text-xs uppercase tracking-[0.35em] text-slate-500">Welcome back</p>
-                <h1 className="text-3xl font-semibold text-white sm:text-4xl">
-                    {profile?.display_name ?? '旅行者'}的专属行程中心
+        <main className="relative mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-12 px-6 py-16 text-slate-900 dark:text-slate-100">
+            <GradientBackground />
+            <ThemeToggle className="absolute right-4 top-4 z-20 sm:right-6 sm:top-6" />
+            <header className="relative flex flex-col gap-4">
+                <div className="inline-flex w-fit items-center gap-2 rounded-full border border-emerald-500/40 bg-emerald-100/80 px-4 py-1 text-xs font-semibold text-emerald-700 backdrop-blur dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">
+                    <Plane className="h-4 w-4" aria-hidden />
+                    欢迎回来，{profile?.display_name ?? '旅行者'}
+                </div>
+                <h1 className="text-3xl font-semibold text-slate-900 dark:text-slate-50 sm:text-[2.6rem] sm:leading-[1.1]">
+                    管理行程、预算与偏好，让 AI 帮你打造无缝旅程
                 </h1>
-                <p className="text-sm text-slate-400">
-                    创建新行程、查看历史计划，稍后还能开启 AI 生成的预算与语音助手。
+                <p className="max-w-2xl text-sm text-slate-600 dark:text-slate-300 sm:text-base">
+                    查看即将出发的旅程，快速新建计划，并为后续的 AI 行程生成、语音助手与地图同步打好基础。
                 </p>
             </header>
 
-            <section className="grid gap-8 lg:grid-cols-[1.1fr,0.9fr]">
+            <section className="relative grid gap-10 lg:grid-cols-[1.15fr,0.85fr]">
                 <ItineraryList itineraries={itineraries} />
                 <CreateItineraryForm />
             </section>
@@ -96,26 +103,37 @@ async function fetchItineraries(
 
 function LandingSection() {
     return (
-        <main className="flex min-h-screen flex-col items-center justify-center gap-6 px-6 py-16">
+        <main className="relative flex min-h-screen flex-col items-center justify-center gap-10 overflow-hidden px-6 py-20 text-slate-900 dark:text-slate-100">
+            <ThemeToggle className="absolute right-6 top-6 z-20" />
+            <div className="absolute inset-0 -z-10 bg-slate-100 dark:bg-slate-950">
+                <div className="absolute -top-56 left-1/2 h-96 w-96 -translate-x-1/2 rounded-full bg-emerald-400/30 blur-[140px] dark:bg-emerald-500/30" />
+                <div className="absolute bottom-0 left-1/3 h-80 w-80 rounded-full bg-cyan-400/25 blur-[120px] dark:bg-cyan-500/20" />
+                <div className="absolute -bottom-40 right-1/4 h-72 w-72 rounded-full bg-purple-400/25 blur-[120px] dark:bg-purple-500/20" />
+            </div>
+
             <div className="max-w-3xl text-center">
-                <p className="text-sm uppercase tracking-[0.35em] text-slate-400">AI Travel Planner</p>
-                <h1 className="mt-4 text-4xl font-semibold leading-tight text-slate-50 sm:text-5xl">
-                    让 AI 帮你规划下一次完美旅行
+                <span className="inline-flex items-center gap-2 rounded-full border border-emerald-400/40 bg-emerald-100/80 px-4 py-1 text-xs font-semibold tracking-[0.3em] text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-100">
+                    <Plane className="h-4 w-4" aria-hidden />
+                    AI TRAVEL PLANNER
+                </span>
+                <h1 className="mt-6 text-4xl font-semibold leading-tight text-slate-900 dark:text-slate-50 sm:text-[3.2rem] sm:leading-[1.1]">
+                    让 AI 与语音助手成为你的私人旅行策划师
                 </h1>
-                <p className="mt-6 text-base leading-relaxed text-slate-300 sm:text-lg">
-                    输入旅行目的地、天数、预算与偏好，马上生成包含交通、住宿、景点、餐饮与费用的智能行程。稍后我们会接入语音指令、地图导航与云端同步功能。
+                <p className="mt-6 text-base leading-relaxed text-slate-600 dark:text-slate-300 sm:text-lg">
+                    告诉我们目的地、预算与偏好，即刻生成涵盖交通、住宿、景点与餐饮的全方位行程。后续还会提供费用跟踪、地图导航与多设备同步。
                 </p>
             </div>
-            <div className="flex flex-col items-stretch gap-4 sm:w-[480px]">
-                <button className="rounded-lg bg-emerald-500 px-6 py-4 text-base font-medium text-slate-900 shadow transition hover:bg-emerald-400">
-                    即将上线：开始规划
-                </button>
+
+            <div className="flex flex-col items-stretch gap-4 sm:w-[420px]">
                 <Link
                     href="/signin"
-                    className="rounded-lg border border-slate-700 px-6 py-4 text-center text-base font-medium text-slate-200 transition hover:border-slate-600 hover:text-white"
+                    className="inline-flex items-center justify-center rounded-2xl bg-gradient-to-r from-emerald-500 via-emerald-400 to-cyan-400 px-6 py-4 text-base font-semibold text-slate-950 shadow-lg shadow-emerald-500/30 transition hover:from-emerald-400 hover:via-emerald-300 hover:to-cyan-300"
                 >
-                    登录以同步行程
+                    立即体验智能行程
                 </Link>
+                <button className="rounded-2xl border border-slate-300/80 bg-white/80 px-6 py-4 text-base font-medium text-slate-700 backdrop-blur transition hover:border-slate-300 hover:bg-white dark:border-slate-700/70 dark:bg-slate-900/70 dark:text-slate-200 dark:hover:border-slate-500/80 dark:hover:bg-slate-900">
+                    了解功能与路线模板（敬请期待）
+                </button>
             </div>
         </main>
     );
@@ -124,47 +142,60 @@ function LandingSection() {
 function ItineraryList({ itineraries }: { itineraries: Itinerary[] }) {
     if (!itineraries.length) {
         return (
-            <div className="flex h-full flex-col justify-between gap-6 rounded-2xl border border-dashed border-slate-700 bg-slate-900/40 p-6">
-                <div>
-                    <h2 className="text-lg font-semibold text-white">暂无行程</h2>
-                    <p className="mt-2 text-sm text-slate-400">
-                        使用右侧表单创建你的第一份旅行计划，AI 将在稍后帮助你完善行程细节与预算。
+            <div className="flex h-full flex-col justify-between gap-6 rounded-3xl border border-dashed border-emerald-500/30 bg-white/80 p-8 text-slate-600 shadow-sm backdrop-blur dark:border-emerald-500/40 dark:bg-slate-900/60 dark:text-slate-200">
+                <div className="space-y-3">
+                    <h2 className="text-lg font-semibold text-slate-900 dark:text-white">暂无行程</h2>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                        使用右侧表单创建你的第一份旅行计划，AI 将根据你的偏好推荐交通、酒店与活动。
                     </p>
                 </div>
-                <p className="text-xs text-slate-500">
-                    创建后可以在此查看所有行程，并将它们同步到地图和语音助手中。
+                <p className="text-xs text-slate-500 dark:text-slate-500">
+                    创建设备同步、费用追踪与语音助手功能将在后续版本陆续开放，敬请期待。
                 </p>
             </div>
         );
     }
 
     return (
-        <div className="flex flex-col gap-4">
-            <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-white">我的行程</h2>
-                <span className="text-xs text-slate-500">共 {itineraries.length} 个计划</span>
+        <div className="flex flex-col gap-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <h2 className="text-lg font-semibold text-slate-900 dark:text-white">我的行程</h2>
+                <span className="rounded-full border border-emerald-400/40 bg-emerald-100/70 px-3 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200">
+                    共 {itineraries.length} 个计划
+                </span>
             </div>
-            <ul className="flex flex-col gap-4">
+            <ul className="grid gap-4">
                 {itineraries.map((itinerary) => (
                     <li
                         key={itinerary.id}
-                        className="group rounded-2xl border border-slate-800 bg-slate-900/60 p-5 transition hover:border-emerald-400/60"
+                        className="group relative overflow-hidden rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm transition hover:border-emerald-300/60 hover:shadow-lg hover:shadow-emerald-200/20 dark:border-slate-800/80 dark:bg-gradient-to-br dark:from-slate-900/80 dark:via-slate-900/50 dark:to-slate-900/80 dark:hover:border-emerald-400/60 dark:hover:shadow-emerald-500/10"
                     >
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                            <div>
-                                <h3 className="text-lg font-medium text-white">
+                        <div className="pointer-events-none absolute -right-20 top-0 h-52 w-52 rounded-full bg-emerald-500/5 blur-3xl transition group-hover:bg-emerald-500/15 dark:bg-emerald-500/10 dark:group-hover:bg-emerald-500/20" />
+                        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="space-y-1">
+                                <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
                                     {itinerary.title || `${itinerary.destination} 行程`}
                                 </h3>
-                                <p className="text-sm text-slate-400">{itinerary.destination}</p>
+                                <p className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+                                    <MapPin className="h-4 w-4 text-emerald-500 dark:text-emerald-300" aria-hidden />
+                                    {itinerary.destination}
+                                </p>
                             </div>
-                            <p className="text-sm text-slate-300">
-                                {formatDateRange(itinerary.start_date, itinerary.end_date)} · {itinerary.travelers} 人
+                            <p className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+                                <CalendarRange className="h-4 w-4 text-emerald-500 dark:text-emerald-300" aria-hidden />
+                                {formatDateRange(itinerary.start_date, itinerary.end_date)}
+                                <span className="mx-2 h-4 w-px bg-slate-200 dark:bg-slate-700" aria-hidden />
+                                <Users className="h-4 w-4 text-emerald-500 dark:text-emerald-300" aria-hidden />
+                                {itinerary.travelers} 人
                             </p>
                         </div>
-                        <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-slate-400">
-                            <span>最近更新：{formatDate(itinerary.updated_at)}</span>
+                        <div className="relative mt-4 flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
+                            <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 dark:bg-slate-800/60">
+                                最近更新：{formatDate(itinerary.updated_at)}
+                            </span>
                             {typeof itinerary.budget === 'number' && (
-                                <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-emerald-300">
+                                <span className="inline-flex items-center gap-2 rounded-full bg-emerald-100 px-3 py-1 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200">
+                                    <Wallet2 className="h-4 w-4 text-emerald-500 dark:text-emerald-200" aria-hidden />
                                     预算 ¥{itinerary.budget.toLocaleString('zh-CN')}
                                 </span>
                             )}
@@ -172,6 +203,15 @@ function ItineraryList({ itineraries }: { itineraries: Itinerary[] }) {
                     </li>
                 ))}
             </ul>
+        </div>
+    );
+}
+
+function GradientBackground() {
+    return (
+        <div className="pointer-events-none absolute inset-0 -z-10">
+            <div className="absolute inset-x-10 top-16 h-80 rounded-full bg-gradient-to-r from-emerald-300/30 via-cyan-300/25 to-purple-300/25 blur-[150px] dark:from-emerald-500/20 dark:via-cyan-500/20 dark:to-purple-500/20" />
+            <div className="absolute bottom-10 right-10 h-72 w-72 rounded-full bg-emerald-300/25 blur-[120px] dark:bg-emerald-500/10" />
         </div>
     );
 }

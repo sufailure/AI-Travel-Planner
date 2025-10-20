@@ -2,6 +2,8 @@
 
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
+import type { ReactNode } from 'react';
+import { CalendarRange, MapPin, Sparkles, Users, Wallet2 } from 'lucide-react';
 
 const DEFAULT_TRAVELERS = 1;
 
@@ -66,96 +68,117 @@ export function CreateItineraryForm() {
     return (
         <form
             onSubmit={handleSubmit}
-            className="flex flex-col gap-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-6"
+            className="relative flex flex-col gap-5 overflow-hidden rounded-3xl border border-slate-200 bg-white p-8 shadow-lg shadow-emerald-200/20 transition dark:border-slate-700/60 dark:bg-slate-900/70 dark:shadow-emerald-500/10"
         >
-            <div>
-                <h2 className="text-lg font-semibold text-white">快速创建行程</h2>
-                <p className="mt-1 text-sm text-slate-400">
-                    填写目的地和日期，我们将基于偏好生成初版计划。
+            <div className="pointer-events-none absolute -top-36 right-[-72px] h-56 w-56 rounded-full bg-emerald-300/30 blur-3xl dark:bg-emerald-500/20" />
+            <header className="relative flex flex-col gap-2">
+                <div className="inline-flex items-center gap-2 self-start rounded-full bg-emerald-100/80 px-3 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
+                    <Sparkles className="h-4 w-4" aria-hidden />
+                    极速建旅程
+                </div>
+                <h2 className="text-xl font-semibold text-slate-900 dark:text-white">快速创建行程</h2>
+                <p className="text-sm text-slate-600 dark:text-slate-400">
+                    填写目标城市与日期，我们将利用偏好和预算生成智能路线草稿。
                 </p>
-            </div>
+            </header>
 
-            <label className="text-sm text-slate-300">
-                行程标题（可选）
+            <Field label="行程标题（可选）" icon={<Sparkles className="h-4 w-4" aria-hidden />}>
                 <input
                     type="text"
                     value={title}
                     onChange={(event) => setTitle(event.target.value)}
                     placeholder="樱花追逐之旅"
-                    className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-base text-white outline-none transition focus:border-emerald-400"
+                    className="form-input"
                 />
-            </label>
+            </Field>
 
-            <label className="text-sm text-slate-300">
-                目的地
+            <Field label="目的地" icon={<MapPin className="h-4 w-4" aria-hidden />} required>
                 <input
                     type="text"
                     required
                     value={destination}
                     onChange={(event) => setDestination(event.target.value)}
-                    placeholder="日本 东京"
-                    className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-base text-white outline-none transition focus:border-emerald-400"
+                    placeholder="日本 · 东京"
+                    className="form-input"
                 />
-            </label>
+            </Field>
 
             <div className="grid gap-4 sm:grid-cols-2">
-                <label className="text-sm text-slate-300">
-                    开始日期
+                <Field label="开始日期" icon={<CalendarRange className="h-4 w-4" aria-hidden />} required>
                     <input
                         type="date"
                         required
                         value={startDate}
                         onChange={(event) => setStartDate(event.target.value)}
-                        className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-base text-white outline-none transition focus:border-emerald-400"
+                        className="form-input"
                     />
-                </label>
-
-                <label className="text-sm text-slate-300">
-                    结束日期
+                </Field>
+                <Field label="结束日期" icon={<CalendarRange className="h-4 w-4" aria-hidden />} required>
                     <input
                         type="date"
                         required
                         value={endDate}
                         onChange={(event) => setEndDate(event.target.value)}
-                        className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-base text-white outline-none transition focus:border-emerald-400"
+                        className="form-input"
                     />
-                </label>
+                </Field>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
-                <label className="text-sm text-slate-300">
-                    同行人数
+                <Field label="同行人数" icon={<Users className="h-4 w-4" aria-hidden />}>
                     <input
                         type="number"
                         min={1}
                         value={travelers}
                         onChange={(event) => setTravelers(Number(event.target.value) || DEFAULT_TRAVELERS)}
-                        className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-base text-white outline-none transition focus:border-emerald-400"
+                        className="form-input"
                     />
-                </label>
-
-                <label className="text-sm text-slate-300">
-                    预算（可选，人民币）
+                </Field>
+                <Field label="预算（人民币，可选）" icon={<Wallet2 className="h-4 w-4" aria-hidden />}>
                     <input
                         type="number"
                         min={0}
                         value={budget}
                         onChange={(event) => setBudget(event.target.value)}
                         placeholder="10000"
-                        className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-base text-white outline-none transition focus:border-emerald-400"
+                        className="form-input"
                     />
-                </label>
+                </Field>
             </div>
 
             <button
                 type="submit"
                 disabled={isPending}
-                className="mt-2 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-900 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
+                className="mt-2 inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-emerald-500 via-emerald-400 to-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:from-emerald-400 hover:via-emerald-300 hover:to-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
             >
-                {isPending ? '创建中…' : '创建行程'}
+                {isPending ? '创建中…' : '生成旅程草稿'}
             </button>
 
-            {message && <p className="text-sm text-amber-300">{message}</p>}
+            {message && (
+                <p className="rounded-xl border border-emerald-400/40 bg-emerald-100/80 px-4 py-2 text-sm text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">
+                    {message}
+                </p>
+            )}
         </form>
+    );
+}
+
+type FieldProps = {
+    label: string;
+    icon?: ReactNode;
+    children: ReactNode;
+    required?: boolean;
+};
+
+function Field({ label, icon, children, required }: FieldProps) {
+    return (
+        <label className="flex flex-col gap-2 text-sm text-slate-700 dark:text-slate-200">
+            <span className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.25em] text-slate-500 dark:text-slate-400">
+                {icon}
+                {label}
+                {required && <span className="text-emerald-500 dark:text-emerald-300">*</span>}
+            </span>
+            {children}
+        </label>
     );
 }
