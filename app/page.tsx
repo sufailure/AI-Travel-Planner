@@ -1,17 +1,14 @@
 import Link from 'next/link';
-import { CalendarRange, MapPin, Plane, Users, Wallet2 } from 'lucide-react';
+import { Plane } from 'lucide-react';
 import type { SupabaseClient, User } from '@supabase/supabase-js';
 import { CreateItineraryForm } from '@/components/dashboard/create-itinerary-form';
+import { ItineraryList } from '@/components/dashboard/itinerary-list';
 import { ThemeToggle } from '@/components/theme/theme-toggle';
 import { createServerClient } from '@/lib/supabase/server';
 import type { Database } from '@/lib/supabase/types';
 
 type Itinerary = Database['public']['Tables']['itineraries']['Row'];
 type Profile = Pick<Database['public']['Tables']['profiles']['Row'], 'id' | 'display_name'>;
-
-const dateFormatter = new Intl.DateTimeFormat('zh-CN', {
-    dateStyle: 'medium',
-});
 
 export default async function HomePage() {
     const supabase = createServerClient();
@@ -139,74 +136,6 @@ function LandingSection() {
     );
 }
 
-function ItineraryList({ itineraries }: { itineraries: Itinerary[] }) {
-    if (!itineraries.length) {
-        return (
-            <div className="flex h-full flex-col justify-between gap-6 rounded-3xl border border-dashed border-emerald-500/30 bg-white/80 p-8 text-slate-600 shadow-sm backdrop-blur dark:border-emerald-500/40 dark:bg-slate-900/60 dark:text-slate-200">
-                <div className="space-y-3">
-                    <h2 className="text-lg font-semibold text-slate-900 dark:text-white">暂无行程</h2>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">
-                        使用右侧表单创建你的第一份旅行计划，AI 将根据你的偏好推荐交通、酒店与活动。
-                    </p>
-                </div>
-                <p className="text-xs text-slate-500 dark:text-slate-500">
-                    创建设备同步、费用追踪与语音助手功能将在后续版本陆续开放，敬请期待。
-                </p>
-            </div>
-        );
-    }
-
-    return (
-        <div className="flex flex-col gap-5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-                <h2 className="text-lg font-semibold text-slate-900 dark:text-white">我的行程</h2>
-                <span className="rounded-full border border-emerald-400/40 bg-emerald-100/70 px-3 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200">
-                    共 {itineraries.length} 个计划
-                </span>
-            </div>
-            <ul className="grid gap-4">
-                {itineraries.map((itinerary) => (
-                    <li
-                        key={itinerary.id}
-                        className="group relative overflow-hidden rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm transition hover:border-emerald-300/60 hover:shadow-lg hover:shadow-emerald-200/20 dark:border-slate-800/80 dark:bg-gradient-to-br dark:from-slate-900/80 dark:via-slate-900/50 dark:to-slate-900/80 dark:hover:border-emerald-400/60 dark:hover:shadow-emerald-500/10"
-                    >
-                        <div className="pointer-events-none absolute -right-20 top-0 h-52 w-52 rounded-full bg-emerald-500/5 blur-3xl transition group-hover:bg-emerald-500/15 dark:bg-emerald-500/10 dark:group-hover:bg-emerald-500/20" />
-                        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                            <div className="space-y-1">
-                                <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
-                                    {itinerary.title || `${itinerary.destination} 行程`}
-                                </h3>
-                                <p className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-                                    <MapPin className="h-4 w-4 text-emerald-500 dark:text-emerald-300" aria-hidden />
-                                    {itinerary.destination}
-                                </p>
-                            </div>
-                            <p className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-                                <CalendarRange className="h-4 w-4 text-emerald-500 dark:text-emerald-300" aria-hidden />
-                                {formatDateRange(itinerary.start_date, itinerary.end_date)}
-                                <span className="mx-2 h-4 w-px bg-slate-200 dark:bg-slate-700" aria-hidden />
-                                <Users className="h-4 w-4 text-emerald-500 dark:text-emerald-300" aria-hidden />
-                                {itinerary.travelers} 人
-                            </p>
-                        </div>
-                        <div className="relative mt-4 flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
-                            <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 dark:bg-slate-800/60">
-                                最近更新：{formatDate(itinerary.updated_at)}
-                            </span>
-                            {typeof itinerary.budget === 'number' && (
-                                <span className="inline-flex items-center gap-2 rounded-full bg-emerald-100 px-3 py-1 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200">
-                                    <Wallet2 className="h-4 w-4 text-emerald-500 dark:text-emerald-200" aria-hidden />
-                                    预算 ¥{itinerary.budget.toLocaleString('zh-CN')}
-                                </span>
-                            )}
-                        </div>
-                    </li>
-                ))}
-            </ul>
-        </div>
-    );
-}
-
 function GradientBackground() {
     return (
         <div className="pointer-events-none absolute inset-0 -z-10">
@@ -214,22 +143,4 @@ function GradientBackground() {
             <div className="absolute bottom-10 right-10 h-72 w-72 rounded-full bg-emerald-300/25 blur-[120px] dark:bg-emerald-500/10" />
         </div>
     );
-}
-
-function formatDateRange(start: string | null, end: string | null) {
-    if (!start || !end) {
-        return '日期待定';
-    }
-    return `${formatDate(start)} - ${formatDate(end)}`;
-}
-
-function formatDate(value: string | null) {
-    if (!value) {
-        return '未知';
-    }
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) {
-        return '未知';
-    }
-    return dateFormatter.format(date);
 }
