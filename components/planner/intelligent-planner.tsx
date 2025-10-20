@@ -1,35 +1,12 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Loader2, Mic, MicOff, Sparkles } from 'lucide-react';
-
-type PlannerResult = {
-    overview: string;
-    dailyPlan: Array<{
-        title: string;
-        summary: string;
-        activities: string[];
-        meals: string[];
-    }>;
-    transportation: string[];
-    accommodations: string[];
-    restaurants: string[];
-    estimatedBudget: Array<{
-        category: string;
-        amount: number;
-        currency: string;
-        notes: string;
-    }>;
-    tips: string[];
-};
-
-const FALLBACK_MESSAGE = '语音识别不可用，请改用文字输入。';
-
-type RecorderController = {
-    start: () => Promise<void>;
-    stop: () => Promise<string | null>;
-    dispose: () => void;
-};
+import { SPEECH_FALLBACK_MESSAGE, useSpeechRecorder } from '@/lib/client/use-speech-recorder';
+import { ItineraryMap } from '@/components/planner/itinerary-map';
+import type { PlannerResult, PlannerBudgetEntry } from '@/lib/types/planner';
+import type { UserTravelPreferences } from '@/lib/types/preferences';
 
 type GeneratePayload = {
     destination: string;
@@ -45,21 +22,195 @@ type GenerateResponse = {
     raw: string;
 };
 
-export function IntelligentPlanner() {
+type IntelligentPlannerProps = {
+    initialPreferences: UserTravelPreferences | null;
+};
+
+function formatPreferenceText(preferences: UserTravelPreferences | null): string {
+    if (!preferences) {
+        return '';
+    }
+
+    const lines: string[] = [];
+
+    if (Array.isArray(preferences.frequentDestinations) && preferences.frequentDestinations.length > 0) {
+        lines.push(`常去目的地：${preferences.frequentDestinations.join('、')}`);
+    }
+
+    if (Array.isArray(preferences.interests) && preferences.interests.length > 0) {
+        lines.push(`兴趣偏好：${preferences.interests.join('、')}`);
+    }
+
+    if (
+        typeof preferences.defaultBudget === 'number' &&
+        Number.isFinite(preferences.defaultBudget) &&
+        preferences.defaultBudget > 0
+    ) {
+        lines.push(`常规预算：${Math.round(preferences.defaultBudget)} 元`);
+    }
+
+    if (
+        typeof preferences.defaultTravelers === 'number' &&
+        Number.isFinite(preferences.defaultTravelers) &&
+        preferences.defaultTravelers > 0
+    ) {
+        lines.push(`常规同行人数：${Math.max(1, Math.round(preferences.defaultTravelers))} 人`);
+    }
+
+    if (typeof preferences.notes === 'string' && preferences.notes.trim().length > 0) {
+        lines.push(preferences.notes.trim());
+    }
+
+    return lines.join('\n');
+}
+
+export function IntelligentPlanner({ initialPreferences }: IntelligentPlannerProps) {
+    const router = useRouter();
+    const autoPreferenceText = useRef(formatPreferenceText(initialPreferences));
+    const initialTravelers = (() => {
+        const base = initialPreferences?.defaultTravelers;
+        if (typeof base === 'number' && Number.isFinite(base) && base > 0) {
+            return Math.max(1, Math.round(base));
+        }
+        return 2;
+    })();
+    const initialBudget = (() => {
+        const base = initialPreferences?.defaultBudget;
+        if (typeof base === 'number' && Number.isFinite(base) && base > 0) {
+            return String(Math.round(base));
+        }
+        return '';
+    })();
     const [destination, setDestination] = useState('');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
-    const [travelers, setTravelers] = useState(2);
-    const [budget, setBudget] = useState('');
-    const [preferences, setPreferences] = useState('');
-    const [supportsSpeech, setSupportsSpeech] = useState(false);
-    const [isListening, setIsListening] = useState(false);
-    const [isTranscribing, setIsTranscribing] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [travelers, setTravelers] = useState(initialTravelers);
+    const [budget, setBudget] = useState(initialBudget);
+    const [preferences, setPreferences] = useState(() => autoPreferenceText.current || '');
+    const [formError, setFormError] = useState<string | null>(null);
     const [result, setResult] = useState<PlannerResult | null>(null);
     const [rawPlan, setRawPlan] = useState<string | null>(null);
-    const recorderRef = useRef<RecorderController | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [lastUsedDetails, setLastUsedDetails] = useState<GeneratePayload | null>(null);
+    const [saveMessage, setSaveMessage] = useState<string | null>(null);
+    const [saveError, setSaveError] = useState<string | null>(null);
+    const [isSaving, setIsSaving] = useState(false);
+
+    const preferencesRef = useRef(preferences);
+    const budgetRef = useRef(budget);
+    const travelersRef = useRef(travelers);
+    const autoBudgetRef = useRef(
+        typeof initialPreferences?.defaultBudget === 'number' &&
+            Number.isFinite(initialPreferences.defaultBudget) &&
+            initialPreferences.defaultBudget > 0
+            ? initialBudget
+            : '',
+    );
+    const autoTravelersRef = useRef(
+        typeof initialPreferences?.defaultTravelers === 'number' &&
+            Number.isFinite(initialPreferences.defaultTravelers) &&
+            initialPreferences.defaultTravelers > 0
+            ? initialTravelers
+            : 0,
+    );
+
+    useEffect(() => {
+        preferencesRef.current = preferences;
+    }, [preferences]);
+
+    useEffect(() => {
+        budgetRef.current = budget;
+    }, [budget]);
+
+    useEffect(() => {
+        travelersRef.current = travelers;
+    }, [travelers]);
+
+    useEffect(() => {
+        const listener = (event: Event) => {
+            const detail = (event as CustomEvent<UserTravelPreferences | null>).detail;
+
+            if (typeof detail === 'undefined') {
+                return;
+            }
+
+            const previousAutoText = autoPreferenceText.current;
+            const previousAutoBudget = autoBudgetRef.current;
+            const previousAutoTravelers = autoTravelersRef.current;
+            const nextText = formatPreferenceText(detail);
+
+            autoPreferenceText.current = nextText;
+
+            if (
+                detail &&
+                typeof detail.defaultTravelers === 'number' &&
+                Number.isFinite(detail.defaultTravelers) &&
+                detail.defaultTravelers > 0
+            ) {
+                const nextTravelers = Math.max(1, Math.round(detail.defaultTravelers));
+                autoTravelersRef.current = nextTravelers;
+                const shouldUpdateTravelers =
+                    travelersRef.current === previousAutoTravelers ||
+                    previousAutoTravelers === 0 ||
+                    travelersRef.current <= 1;
+                if (shouldUpdateTravelers) {
+                    setTravelers(nextTravelers);
+                }
+            } else {
+                autoTravelersRef.current = 0;
+                if (travelersRef.current === previousAutoTravelers) {
+                    setTravelers(2);
+                }
+            }
+
+            if (
+                detail &&
+                typeof detail.defaultBudget === 'number' &&
+                Number.isFinite(detail.defaultBudget) &&
+                detail.defaultBudget > 0
+            ) {
+                const nextBudget = String(Math.round(detail.defaultBudget));
+                autoBudgetRef.current = nextBudget;
+                const shouldUpdateBudget =
+                    budgetRef.current.trim().length === 0 || budgetRef.current === previousAutoBudget;
+                if (shouldUpdateBudget) {
+                    setBudget(nextBudget);
+                }
+            } else {
+                autoBudgetRef.current = '';
+                if (budgetRef.current === previousAutoBudget) {
+                    setBudget('');
+                }
+            }
+
+            const shouldReplacePreferences =
+                preferencesRef.current.trim().length === 0 ||
+                preferencesRef.current.trim() === previousAutoText.trim();
+
+            if (shouldReplacePreferences) {
+                setPreferences(nextText);
+            }
+        };
+
+        window.addEventListener('user-preferences-updated', listener as EventListener);
+
+        return () => {
+            window.removeEventListener('user-preferences-updated', listener as EventListener);
+        };
+    }, []);
+
+    const logVoiceTranscript = useCallback((text: string) => {
+        if (!text.trim()) {
+            return;
+        }
+
+        const payload = parseTripDetails(text);
+        fetch('/api/voice-logs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ transcript: text, intent: 'planner-input', payload }),
+        }).catch(() => undefined);
+    }, []);
 
     const applyParsedDetails = useCallback(
         (source: string) => {
@@ -84,155 +235,47 @@ export function IntelligentPlanner() {
         [destination, budget, travelers, startDate, endDate],
     );
 
-    useEffect(() => {
-        if (typeof window === 'undefined') {
-            return;
-        }
-
-        if (!navigator.mediaDevices?.getUserMedia) {
-            setSupportsSpeech(false);
-            return;
-        }
-
-        let stream: MediaStream | null = null;
-        let audioContext: AudioContext | null = null;
-        let processor: ScriptProcessorNode | null = null;
-        let chunks: Float32Array[] = [];
-
-        const cleanup = () => {
-            processor?.disconnect();
-            processor = null;
-            if (audioContext) {
-                audioContext.close().catch(() => undefined);
-                audioContext = null;
-            }
-            if (stream) {
-                stream.getTracks().forEach((track) => track.stop());
-                stream = null;
-            }
-            chunks = [];
-        };
-
-        const startRecording = async () => {
-            setError(null);
-            setIsListening(true);
-
-            try {
-                stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            } catch (err) {
-                setIsListening(false);
-                cleanup();
-                throw new Error('获取麦克风权限失败，请检查系统设置。');
-            }
-
-            try {
-                audioContext = new AudioContext();
-            } catch (error) {
-                setIsListening(false);
-                cleanup();
-                throw new Error('浏览器不支持录音播放环境，请更换浏览器重试。');
-            }
-            const source = audioContext.createMediaStreamSource(stream);
-            const bufferSize = 4096;
-            processor = audioContext.createScriptProcessor(bufferSize, 1, 1);
-            chunks = [];
-
-            processor.onaudioprocess = (event) => {
-                const data = event.inputBuffer.getChannelData(0);
-                chunks.push(new Float32Array(data));
-            };
-
-            const silenceGain = audioContext.createGain();
-            silenceGain.gain.value = 0;
-
-            source.connect(processor);
-            processor.connect(silenceGain);
-            silenceGain.connect(audioContext.destination);
-        };
-
-        const stopRecording = async () => {
-            if (!audioContext) {
-                cleanup();
-                return null;
-            }
-
-            const sampleRate = audioContext.sampleRate;
-            const recordedChunks = chunks;
-            cleanup();
-
-            if (!recordedChunks.length) {
-                return null;
-            }
-
-            const merged = mergeBuffers(recordedChunks);
-            const resampled = resampleBuffer(merged, sampleRate, 16000);
-            const pcm = floatTo16BitPCM(resampled);
-            const base64 = arrayBufferToBase64(pcm.buffer);
-
-            const response = await fetch('/api/speech/transcribe', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ audio: base64 }),
-            });
-
-            if (!response.ok) {
-                const data = await response.json().catch(() => ({}));
-                const errMsg = (data as { error?: string }).error ?? '语音识别失败，请稍后重试。';
-                throw new Error(errMsg);
-            }
-
-            const data = (await response.json()) as { text?: string };
-            return data.text?.trim() ? data.text.trim() : null;
-        };
-
-        recorderRef.current = {
-            start: startRecording,
-            stop: stopRecording,
-            dispose: cleanup,
-        };
-
-        setSupportsSpeech(true);
-
-        return () => {
-            recorderRef.current?.dispose();
-            recorderRef.current = null;
-        };
-    }, []);
-
-    const toggleListening = useCallback(async () => {
-        if (!supportsSpeech || !recorderRef.current) {
-            setError(FALLBACK_MESSAGE);
-            return;
-        }
-
-        if (isListening) {
-            setIsListening(false);
-            setIsTranscribing(true);
-            try {
-                const text = await recorderRef.current.stop();
-                if (text) {
-                    setPreferences((current) => (current ? `${current.trim()}
+    const handleTranscript = useCallback(
+        (text: string) => {
+            setPreferences((current: string) => (current ? `${current.trim()}
 ${text}` : text));
-                    applyParsedDetails(text);
-                }
-            } catch (err) {
-                console.error('Speech transcription failed', err);
-                setError(err instanceof Error ? err.message : '语音识别失败，请稍后再试。');
-            } finally {
-                setIsTranscribing(false);
-            }
-        } else {
-            try {
-                await recorderRef.current.start();
-            } catch (err) {
-                console.error('Speech recorder start failed', err);
-                setError(err instanceof Error ? err.message : '无法启动语音输入。');
-                setIsListening(false);
-            }
+            applyParsedDetails(text);
+            logVoiceTranscript(text);
+        },
+        [applyParsedDetails, logVoiceTranscript],
+    );
+
+    const {
+        supportsSpeech,
+        isListening,
+        isProcessing: isTranscribing,
+        error: speechError,
+        toggleRecording,
+        clearError: clearSpeechError,
+    } = useSpeechRecorder({
+        onTranscript: handleTranscript,
+    });
+
+    const handleToggleListening = useCallback(() => {
+        if (!isListening) {
+            clearSpeechError();
+            setFormError(null);
         }
-    }, [supportsSpeech, isListening, applyParsedDetails]);
+        void toggleRecording();
+    }, [clearSpeechError, isListening, toggleRecording]);
+
+    const errorMessages = useMemo(() => {
+        return [speechError, formError].filter((message): message is string => Boolean(message));
+    }, [speechError, formError]);
+
+    const mapDestination = useMemo(() => {
+        const manual = destination.trim();
+        if (manual) {
+            return manual;
+        }
+        const fromPayload = (lastUsedDetails?.destination ?? '').trim();
+        return fromPayload;
+    }, [destination, lastUsedDetails]);
 
     const canSubmit = useMemo(() => {
         return destination.trim().length > 0 || preferences.trim().length > 0;
@@ -242,9 +285,12 @@ ${text}` : text));
         async (event: React.FormEvent<HTMLFormElement>) => {
             event.preventDefault();
             if (!canSubmit) {
-                setError('请至少提供目的地或语音描述。');
+                setFormError('请至少提供目的地或语音描述。');
                 return;
             }
+
+            setSaveMessage(null);
+            setSaveError(null);
 
             const parsedFromPreferences = preferences.trim().length > 0 ? parseTripDetails(preferences) : {};
             const finalDestination = destination.trim() || parsedFromPreferences.destination || '';
@@ -278,8 +324,11 @@ ${text}` : text));
                 preferences,
             };
 
+            setLastUsedDetails(payload);
+
             setIsSubmitting(true);
-            setError(null);
+            clearSpeechError();
+            setFormError(null);
             setResult(null);
             setRawPlan(null);
 
@@ -294,7 +343,7 @@ ${text}` : text));
 
                 if (!response.ok) {
                     const data = await response.json().catch(() => ({}));
-                    setError((data as { error?: string }).error ?? '生成行程失败，请稍后重试。');
+                    setFormError((data as { error?: string }).error ?? '生成行程失败，请稍后重试。');
                     return;
                 }
 
@@ -303,13 +352,99 @@ ${text}` : text));
                 setRawPlan(data.raw);
             } catch (err) {
                 console.error('Generate itinerary failed', err);
-                setError('生成行程失败，请检查网络连接。');
+                setFormError('生成行程失败，请检查网络连接。');
             } finally {
                 setIsSubmitting(false);
             }
         },
-        [canSubmit, destination, startDate, endDate, travelers, budget, preferences],
+        [canSubmit, destination, startDate, endDate, travelers, budget, preferences, clearSpeechError],
     );
+
+    const handleSavePlan = useCallback(async () => {
+        if (!result) {
+            return;
+        }
+
+        const parsedFallback = preferences.trim().length > 0 ? parseTripDetails(preferences) : {};
+        const destinationLabel =
+            destination.trim() || lastUsedDetails?.destination || parsedFallback.destination || '智能行程';
+
+        const dailySpan = Math.max(result.dailyPlan.length, 1);
+        const startCandidate =
+            lastUsedDetails?.startDate || startDate || parsedFallback.startDate || '';
+        let finalStart = ensureIsoDate(startCandidate);
+        if (!finalStart) {
+            finalStart = formatDateToIso(new Date());
+        }
+
+        const endCandidate =
+            lastUsedDetails?.endDate || endDate || parsedFallback.endDate || '';
+        let finalEnd = ensureIsoDate(endCandidate);
+        if (!finalEnd && finalStart) {
+            finalEnd = addDays(finalStart, dailySpan - 1);
+        }
+
+        if (!finalStart || !finalEnd) {
+            setSaveError('请补充完整的旅行日期后再保存。');
+            return;
+        }
+
+        if (new Date(finalEnd).getTime() < new Date(finalStart).getTime()) {
+            setSaveError('结束日期需要晚于开始日期。');
+            return;
+        }
+
+        const travelerCandidate = lastUsedDetails?.travelers ?? travelers;
+        const safeTravelers = Number.isFinite(travelerCandidate) && travelerCandidate > 0
+            ? Math.round(travelerCandidate)
+            : 1;
+
+        const providedBudget = budget ? Number(budget) : lastUsedDetails?.budget ?? null;
+        const normalizedBudget =
+            typeof providedBudget === 'number' && Number.isFinite(providedBudget) && providedBudget > 0
+                ? providedBudget
+                : null;
+        const planBudget = sumEstimatedBudget(result.estimatedBudget);
+        const finalBudget = normalizedBudget ?? (planBudget > 0 ? planBudget : null);
+
+        const payload = {
+            title: `${destinationLabel} · 智能行程`,
+            destination: destinationLabel,
+            startDate: finalStart,
+            endDate: finalEnd,
+            travelers: safeTravelers,
+            budget: finalBudget,
+            preferences,
+            plan: result,
+            rawPlan,
+        };
+
+        setIsSaving(true);
+        setSaveError(null);
+        setSaveMessage(null);
+
+        try {
+            const response = await fetch('/api/itineraries', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+
+            if (!response.ok) {
+                const errorPayload = (await response.json().catch(() => null)) as { error?: string } | null;
+                throw new Error(errorPayload?.error ?? '行程保存失败，请稍后再试。');
+            }
+
+            setSaveError(null);
+            setSaveMessage('行程已保存并同步到云端。');
+            router.refresh();
+        } catch (error) {
+            const message = error instanceof Error ? error.message : '行程保存失败，请稍后再试。';
+            setSaveError(message);
+        } finally {
+            setIsSaving(false);
+        }
+    }, [result, preferences, destination, lastUsedDetails, startDate, endDate, budget, travelers, rawPlan, router]);
 
     const renderDailyPlan = () => {
         if (!result?.dailyPlan?.length) {
@@ -442,7 +577,7 @@ ${text}` : text));
                         />
                         <button
                             type="button"
-                            onClick={() => void toggleListening()}
+                            onClick={handleToggleListening}
                             disabled={isSubmitting || isTranscribing}
                             className="inline-flex w-fit items-center gap-2 rounded-full border border-slate-300 px-4 py-2 text-xs font-medium text-slate-600 transition hover:border-emerald-400 hover:text-emerald-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:text-slate-300 dark:hover:border-emerald-400/70 dark:hover:text-emerald-300"
                         >
@@ -464,7 +599,9 @@ ${text}` : text));
                             )}
                         </button>
                         {!supportsSpeech && (
-                            <p className="text-xs text-amber-600 dark:text-amber-300">{FALLBACK_MESSAGE}</p>
+                            <p className="text-xs text-amber-600 dark:text-amber-300">
+                                {SPEECH_FALLBACK_MESSAGE}
+                            </p>
                         )}
                     </div>
                 </div>
@@ -484,26 +621,48 @@ ${text}` : text));
                             '生成智能行程'
                         )}
                     </button>
-                    {rawPlan && (
-                        <details className="text-xs text-slate-500 dark:text-slate-400">
-                            <summary className="cursor-pointer select-none">查看 AI 原始回复</summary>
-                            <pre className="mt-2 max-h-64 overflow-auto rounded-lg bg-slate-900/80 p-3 text-[11px] text-emerald-100">
-                                {rawPlan}
-                            </pre>
-                        </details>
-                    )}
                 </div>
 
-                {error && (
-                    <p className="rounded-xl border border-amber-300/60 bg-amber-50/80 px-4 py-2 text-sm text-amber-700 dark:border-amber-400/60 dark:bg-amber-500/10 dark:text-amber-200">
-                        {error}
-                    </p>
+                {errorMessages.length > 0 && (
+                    <div className="space-y-1 rounded-xl border border-amber-300/60 bg-amber-50/80 px-4 py-2 text-sm text-amber-700 dark:border-amber-400/60 dark:bg-amber-500/10 dark:text-amber-200">
+                        {errorMessages.map((message, index) => (
+                            <p key={`${message}-${index}`}>{message}</p>
+                        ))}
+                    </div>
                 )}
             </form>
 
             {result && (
                 <div className="relative mt-8 rounded-3xl border border-emerald-200 bg-emerald-50/80 p-6 text-slate-700 shadow-sm dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-slate-200">
                     <h3 className="text-lg font-semibold text-emerald-700 dark:text-emerald-200">AI 行程概览</h3>
+                    <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+                        <button
+                            type="button"
+                            onClick={handleSavePlan}
+                            disabled={isSaving}
+                            className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                            {isSaving ? (
+                                <>
+                                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                                    保存中…
+                                </>
+                            ) : (
+                                '保存至我的行程'
+                            )}
+                        </button>
+                        {saveMessage && (
+                            <span className="rounded-full bg-white/70 px-3 py-1 text-xs font-medium text-emerald-700 dark:bg-slate-900/50 dark:text-emerald-200">
+                                {saveMessage}
+                            </span>
+                        )}
+                        {saveError && (
+                            <span className="rounded-full bg-white/70 px-3 py-1 text-xs font-medium text-rose-600 dark:bg-slate-900/50 dark:text-rose-300">
+                                {saveError}
+                            </span>
+                        )}
+                    </div>
+                    <ItineraryMap plan={result} destination={mapDestination} />
                     <p className="mt-2 text-sm leading-relaxed">{result.overview}</p>
 
                     {result.transportation.length > 0 && (
@@ -570,62 +729,6 @@ function SectionList({ title, items }: SectionListProps) {
     );
 }
 
-function mergeBuffers(chunks: Float32Array[]) {
-    const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
-    const result = new Float32Array(totalLength);
-    let offset = 0;
-    for (const chunk of chunks) {
-        result.set(chunk, offset);
-        offset += chunk.length;
-    }
-    return result;
-}
-
-function resampleBuffer(buffer: Float32Array, originalRate: number, targetRate: number) {
-    if (originalRate === targetRate) {
-        return buffer;
-    }
-
-    const ratio = originalRate / targetRate;
-    const newLength = Math.round(buffer.length / ratio);
-    const result = new Float32Array(newLength);
-
-    for (let i = 0; i < newLength; i += 1) {
-        const index = i * ratio;
-        const leftIndex = Math.floor(index);
-        const rightIndex = Math.min(Math.ceil(index), buffer.length - 1);
-        const weight = index - leftIndex;
-        const leftValue = buffer[leftIndex] ?? 0;
-        const rightValue = buffer[rightIndex] ?? 0;
-        result[i] = leftValue + (rightValue - leftValue) * weight;
-    }
-
-    return result;
-}
-
-function floatTo16BitPCM(buffer: Float32Array) {
-    const output = new ArrayBuffer(buffer.length * 2);
-    const view = new DataView(output);
-
-    for (let i = 0; i < buffer.length; i += 1) {
-        const sample = Math.max(-1, Math.min(1, buffer[i] ?? 0));
-        view.setInt16(i * 2, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
-    }
-
-    return view;
-}
-
-function arrayBufferToBase64(buffer: ArrayBuffer) {
-    const bytes = new Uint8Array(buffer);
-    let binary = '';
-    const chunkSize = 0x8000;
-    for (let i = 0; i < bytes.length; i += chunkSize) {
-        const chunk = bytes.subarray(i, i + chunkSize);
-        binary += String.fromCharCode(...chunk);
-    }
-    return btoa(binary);
-}
-
 type ParsedTripDetails = {
     destination?: string;
     budget?: number;
@@ -633,6 +736,43 @@ type ParsedTripDetails = {
     startDate?: string;
     endDate?: string;
 };
+
+function ensureIsoDate(value?: string | null) {
+    if (!value) {
+        return null;
+    }
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+        return null;
+    }
+
+    return formatDateToIso(date);
+}
+
+function formatDateToIso(date: Date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+function addDays(isoDate: string, days: number) {
+    const date = new Date(isoDate);
+    if (Number.isNaN(date.getTime())) {
+        return isoDate;
+    }
+
+    date.setDate(date.getDate() + days);
+    return formatDateToIso(date);
+}
+
+function sumEstimatedBudget(entries: PlannerBudgetEntry[]) {
+    return entries.reduce((total, entry) => {
+        const amount = typeof entry.amount === 'number' ? entry.amount : Number(entry.amount ?? 0);
+        return Number.isFinite(amount) ? total + amount : total;
+    }, 0);
+}
 
 function parseTripDetails(input: string): ParsedTripDetails {
     if (!input) {

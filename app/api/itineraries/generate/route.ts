@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import type { PlannerResult } from '@/lib/types/planner';
 
 const DASHSCOPE_ENDPOINT = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation';
 const DEFAULT_MODEL = process.env.LLM_MODEL_ID ?? 'qwen-plus';
@@ -144,26 +145,6 @@ export async function POST(request: NextRequest) {
 
 type PromptInput = Required<Pick<GenerateRequestPayload, 'destination'>> & Omit<GenerateRequestPayload, 'destination'>;
 
-type AiPlan = {
-    overview: string;
-    dailyPlan: Array<{
-        title: string;
-        summary: string;
-        activities: string[];
-        meals: string[];
-    }>;
-    transportation: string[];
-    accommodations: string[];
-    restaurants: string[];
-    estimatedBudget: Array<{
-        category: string;
-        amount: number;
-        currency: string;
-        notes: string;
-    }>;
-    tips: string[];
-};
-
 function buildUserPrompt({ destination, startDate, endDate, travelers, budget, preferences }: PromptInput) {
     const payload = {
         destination,
@@ -203,7 +184,7 @@ function inferDestination(text: string) {
     return '';
 }
 
-function extractItinerary(content: string): AiPlan | null {
+function extractItinerary(content: string): PlannerResult | null {
     if (!content) {
         return null;
     }
@@ -231,12 +212,12 @@ function findJsonSegment(text: string) {
     return text.slice(start, end + 1);
 }
 
-function normalisePlan(candidate: unknown): AiPlan | null {
+function normalisePlan(candidate: unknown): PlannerResult | null {
     if (!candidate || typeof candidate !== 'object') {
         return null;
     }
 
-    const parsed = candidate as Partial<AiPlan>;
+    const parsed = candidate as Partial<PlannerResult>;
 
     return {
         overview: typeof parsed.overview === 'string' ? parsed.overview : '行程概览未知。',

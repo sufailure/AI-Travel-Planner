@@ -26,7 +26,7 @@ const useIsomorphicLayoutEffect = typeof window === 'undefined' ? useEffect : us
 
 function getPreferredTheme(): Theme {
     if (typeof window === 'undefined') {
-        return 'dark';
+        return 'light';
     }
 
     const stored = window.localStorage.getItem(STORAGE_KEY);
@@ -34,12 +34,12 @@ function getPreferredTheme(): Theme {
         return stored;
     }
 
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    return 'light';
 }
 
 export function ThemeProvider({
     children,
-    defaultTheme = 'dark',
+    defaultTheme = 'light',
 }: {
     children: ReactNode;
     defaultTheme?: Theme;

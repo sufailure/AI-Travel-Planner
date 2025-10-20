@@ -1,13 +1,15 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Headphones, Map, Sparkles } from 'lucide-react';
-import { CreateItineraryForm } from '@/components/dashboard/create-itinerary-form';
 import { ItineraryList } from '@/components/dashboard/itinerary-list';
+import { BudgetTracker } from '@/components/planner/budget-tracker';
 import { IntelligentPlanner } from '@/components/planner/intelligent-planner';
+import { PreferencesPanel } from '@/components/planner/preferences-panel';
 import { PageBackground } from '@/components/layout/page-background';
 import { TopNavigation } from '@/components/layout/top-navigation';
 import { createServerClient } from '@/lib/supabase/server';
 import { ensureUserProfile, getUserItineraries } from '@/lib/supabase/queries';
+import { normalizeUserPreferences, sanitizeUserPreferences } from '@/lib/types/preferences';
 
 export default async function PlannerPage() {
     const supabase = createServerClient();
@@ -25,6 +27,9 @@ export default async function PlannerPage() {
     const profile = await ensureUserProfile(supabase, session.user);
     const itineraries = await getUserItineraries(supabase, session.user.id);
     const latestItinerary = itineraries[0] ?? null;
+    const initialPreferences = sanitizeUserPreferences(
+        normalizeUserPreferences(profile?.preferences ?? null),
+    );
 
     return (
         <main className="relative mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-12 px-6 py-16 text-slate-900 dark:text-slate-100">
@@ -95,8 +100,9 @@ export default async function PlannerPage() {
                             返回首页查看概览
                         </Link>
                     </div>
+                    <PreferencesPanel initialPreferences={initialPreferences} />
+                    <BudgetTracker itineraryId={latestItinerary?.id ?? null} />
                     <ItineraryList itineraries={itineraries} />
-                    <CreateItineraryForm />
                 </div>
             </section>
         </main>

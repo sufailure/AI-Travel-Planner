@@ -1,8 +1,8 @@
 import type { SupabaseClient, User } from '@supabase/supabase-js';
-import type { Database } from '@/lib/supabase/types';
+import type { Database, Json } from '@/lib/supabase/types';
 
 export type Itinerary = Database['public']['Tables']['itineraries']['Row'];
-export type Profile = Pick<Database['public']['Tables']['profiles']['Row'], 'id' | 'display_name'>;
+export type Profile = Pick<Database['public']['Tables']['profiles']['Row'], 'id' | 'display_name' | 'preferences'>;
 
 export async function ensureUserProfile(
     supabase: SupabaseClient<Database> | null,
@@ -14,7 +14,7 @@ export async function ensureUserProfile(
 
     const { data: existingProfile } = await supabase
         .from('profiles')
-        .select('id, display_name')
+        .select('id, display_name, preferences')
         .eq('id', user.id)
         .maybeSingle();
 
@@ -32,8 +32,9 @@ export async function ensureUserProfile(
         .insert({
             id: user.id,
             display_name: defaultName,
+            preferences: null as Json | null,
         })
-        .select('id, display_name')
+        .select('id, display_name, preferences')
         .single();
 
     return insertedProfile;

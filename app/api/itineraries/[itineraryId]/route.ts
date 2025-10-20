@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { createRouteClient } from '@/lib/supabase/route';
 
-export async function DELETE(request: NextRequest, { params }: { params: { id?: string } }) {
-    const itineraryId = params.id;
+export async function DELETE(_request: NextRequest, { params }: { params: { itineraryId?: string } }) {
+    const itineraryId = params.itineraryId;
 
     if (!itineraryId) {
         return NextResponse.json({ error: 'Itinerary id is required.' }, { status: 400 });
