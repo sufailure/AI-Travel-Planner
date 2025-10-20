@@ -66,7 +66,7 @@ export default async function PlannerPage() {
             </header>
 
             <section className="grid gap-8 lg:grid-cols-[minmax(0,1fr),0.42fr]">
-                <IntelligentPlanner />
+                <IntelligentPlanner initialPreferences={initialPreferences} />
                 <div className="flex flex-col gap-6">
                     <div className="rounded-3xl border border-slate-200/80 bg-white/85 p-6 text-sm text-slate-600 shadow-lg shadow-slate-200/30 backdrop-blur dark:border-slate-700/60 dark:bg-slate-900/70 dark:text-slate-300">
                         <div className="flex items-start gap-3">

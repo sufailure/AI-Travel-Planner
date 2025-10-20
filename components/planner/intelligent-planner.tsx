@@ -6,7 +6,7 @@ import { Loader2, Mic, MicOff, Sparkles } from 'lucide-react';
 import { SPEECH_FALLBACK_MESSAGE, useSpeechRecorder } from '@/lib/client/use-speech-recorder';
 import { ItineraryMap } from '@/components/planner/itinerary-map';
 import type { PlannerResult, PlannerBudgetEntry } from '@/lib/types/planner';
-import type { UserTravelPreferences } from '@/lib/types/preferences';
+import { sanitizeUserPreferences, type UserTravelPreferences } from '@/lib/types/preferences';
 
 type GeneratePayload = {
     destination: string;
@@ -22,23 +22,19 @@ type GenerateResponse = {
     raw: string;
 };
 
-type IntelligentPlannerProps = {
-    initialPreferences: UserTravelPreferences | null;
-};
-
-function formatPreferenceText(preferences: UserTravelPreferences | null): string {
+function formatPreferenceText(preferences: UserTravelPreferences | null) {
     if (!preferences) {
         return '';
     }
 
-    const lines: string[] = [];
+    const parts: string[] = [];
 
-    if (Array.isArray(preferences.frequentDestinations) && preferences.frequentDestinations.length > 0) {
-        lines.push(`常去目的地：${preferences.frequentDestinations.join('、')}`);
+    if (preferences.frequentDestinations?.length) {
+        parts.push(`常去目的地：${preferences.frequentDestinations.join('、')}`);
     }
 
-    if (Array.isArray(preferences.interests) && preferences.interests.length > 0) {
-        lines.push(`兴趣偏好：${preferences.interests.join('、')}`);
+    if (preferences.interests?.length) {
+        parts.push(`兴趣偏好：${preferences.interests.join('、')}`);
     }
 
     if (
@@ -46,7 +42,7 @@ function formatPreferenceText(preferences: UserTravelPreferences | null): string
         Number.isFinite(preferences.defaultBudget) &&
         preferences.defaultBudget > 0
     ) {
-        lines.push(`常规预算：${Math.round(preferences.defaultBudget)} 元`);
+        parts.push(`常规预算：约 ${Math.round(preferences.defaultBudget)} 元`);
     }
 
     if (
@@ -54,38 +50,49 @@ function formatPreferenceText(preferences: UserTravelPreferences | null): string
         Number.isFinite(preferences.defaultTravelers) &&
         preferences.defaultTravelers > 0
     ) {
-        lines.push(`常规同行人数：${Math.max(1, Math.round(preferences.defaultTravelers))} 人`);
+        parts.push(`常规同行人数：${Math.max(1, Math.round(preferences.defaultTravelers))} 人`);
     }
 
     if (typeof preferences.notes === 'string' && preferences.notes.trim().length > 0) {
-        lines.push(preferences.notes.trim());
+        parts.push(preferences.notes.trim());
     }
 
-    return lines.join('\n');
+    return parts.join('\n');
+}
+
+type IntelligentPlannerProps = {
+    initialPreferences: UserTravelPreferences | null;
+};
+
+function defaultTravelersFromPreferences(preferences: UserTravelPreferences | null) {
+    const base = preferences?.defaultTravelers;
+    if (typeof base === 'number' && Number.isFinite(base) && base > 0) {
+        return Math.max(1, Math.round(base));
+    }
+    return 2;
+}
+
+function defaultBudgetFromPreferences(preferences: UserTravelPreferences | null) {
+    const base = preferences?.defaultBudget;
+    if (typeof base === 'number' && Number.isFinite(base) && base > 0) {
+        return String(Math.round(base));
+    }
+    return '';
 }
 
 export function IntelligentPlanner({ initialPreferences }: IntelligentPlannerProps) {
     const router = useRouter();
-    const autoPreferenceText = useRef(formatPreferenceText(initialPreferences));
-    const initialTravelers = (() => {
-        const base = initialPreferences?.defaultTravelers;
-        if (typeof base === 'number' && Number.isFinite(base) && base > 0) {
-            return Math.max(1, Math.round(base));
-        }
-        return 2;
-    })();
-    const initialBudget = (() => {
-        const base = initialPreferences?.defaultBudget;
-        if (typeof base === 'number' && Number.isFinite(base) && base > 0) {
-            return String(Math.round(base));
-        }
-        return '';
-    })();
+    const sanitizedInitialPreferences = useMemo(
+        () => sanitizeUserPreferences(initialPreferences),
+        [initialPreferences],
+    );
+    const [preferenceSnapshot, setPreferenceSnapshot] = useState(sanitizedInitialPreferences);
+    const autoPreferenceText = useRef(formatPreferenceText(sanitizedInitialPreferences));
     const [destination, setDestination] = useState('');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
-    const [travelers, setTravelers] = useState(initialTravelers);
-    const [budget, setBudget] = useState(initialBudget);
+    const [travelers, setTravelers] = useState(() => defaultTravelersFromPreferences(sanitizedInitialPreferences));
+    const [budget, setBudget] = useState(() => defaultBudgetFromPreferences(sanitizedInitialPreferences));
     const [preferences, setPreferences] = useState(() => autoPreferenceText.current || '');
     const [formError, setFormError] = useState<string | null>(null);
     const [result, setResult] = useState<PlannerResult | null>(null);
@@ -100,19 +107,24 @@ export function IntelligentPlanner({ initialPreferences }: IntelligentPlannerPro
     const budgetRef = useRef(budget);
     const travelersRef = useRef(travelers);
     const autoBudgetRef = useRef(
-        typeof initialPreferences?.defaultBudget === 'number' &&
-            Number.isFinite(initialPreferences.defaultBudget) &&
-            initialPreferences.defaultBudget > 0
-            ? initialBudget
+        typeof sanitizedInitialPreferences?.defaultBudget === 'number' &&
+            Number.isFinite(sanitizedInitialPreferences.defaultBudget) &&
+            sanitizedInitialPreferences.defaultBudget > 0
+            ? defaultBudgetFromPreferences(sanitizedInitialPreferences)
             : '',
     );
     const autoTravelersRef = useRef(
-        typeof initialPreferences?.defaultTravelers === 'number' &&
-            Number.isFinite(initialPreferences.defaultTravelers) &&
-            initialPreferences.defaultTravelers > 0
-            ? initialTravelers
+        typeof sanitizedInitialPreferences?.defaultTravelers === 'number' &&
+            Number.isFinite(sanitizedInitialPreferences.defaultTravelers) &&
+            sanitizedInitialPreferences.defaultTravelers > 0
+            ? defaultTravelersFromPreferences(sanitizedInitialPreferences)
             : 0,
     );
+
+    useEffect(() => {
+        setPreferenceSnapshot(sanitizedInitialPreferences);
+        autoPreferenceText.current = formatPreferenceText(sanitizedInitialPreferences);
+    }, [sanitizedInitialPreferences]);
 
     useEffect(() => {
         preferencesRef.current = preferences;
@@ -134,20 +146,22 @@ export function IntelligentPlanner({ initialPreferences }: IntelligentPlannerPro
                 return;
             }
 
+            const sanitizedDetail = sanitizeUserPreferences(detail ?? null);
+            setPreferenceSnapshot(sanitizedDetail);
             const previousAutoText = autoPreferenceText.current;
             const previousAutoBudget = autoBudgetRef.current;
             const previousAutoTravelers = autoTravelersRef.current;
-            const nextText = formatPreferenceText(detail);
+            const nextText = formatPreferenceText(sanitizedDetail);
 
             autoPreferenceText.current = nextText;
 
             if (
-                detail &&
-                typeof detail.defaultTravelers === 'number' &&
-                Number.isFinite(detail.defaultTravelers) &&
-                detail.defaultTravelers > 0
+                sanitizedDetail &&
+                typeof sanitizedDetail.defaultTravelers === 'number' &&
+                Number.isFinite(sanitizedDetail.defaultTravelers) &&
+                sanitizedDetail.defaultTravelers > 0
             ) {
-                const nextTravelers = Math.max(1, Math.round(detail.defaultTravelers));
+                const nextTravelers = Math.max(1, Math.round(sanitizedDetail.defaultTravelers));
                 autoTravelersRef.current = nextTravelers;
                 const shouldUpdateTravelers =
                     travelersRef.current === previousAutoTravelers ||
@@ -164,12 +178,12 @@ export function IntelligentPlanner({ initialPreferences }: IntelligentPlannerPro
             }
 
             if (
-                detail &&
-                typeof detail.defaultBudget === 'number' &&
-                Number.isFinite(detail.defaultBudget) &&
-                detail.defaultBudget > 0
+                sanitizedDetail &&
+                typeof sanitizedDetail.defaultBudget === 'number' &&
+                Number.isFinite(sanitizedDetail.defaultBudget) &&
+                sanitizedDetail.defaultBudget > 0
             ) {
-                const nextBudget = String(Math.round(detail.defaultBudget));
+                const nextBudget = String(Math.round(sanitizedDetail.defaultBudget));
                 autoBudgetRef.current = nextBudget;
                 const shouldUpdateBudget =
                     budgetRef.current.trim().length === 0 || budgetRef.current === previousAutoBudget;
@@ -198,6 +212,56 @@ export function IntelligentPlanner({ initialPreferences }: IntelligentPlannerPro
             window.removeEventListener('user-preferences-updated', listener as EventListener);
         };
     }, []);
+
+    const destinationSuggestions = useMemo(
+        () => preferenceSnapshot?.frequentDestinations ?? [],
+        [preferenceSnapshot],
+    );
+    const interestSuggestions = useMemo(
+        () => preferenceSnapshot?.interests ?? [],
+        [preferenceSnapshot],
+    );
+    const hasDestinationSuggestions = destinationSuggestions.length > 0;
+    const hasInterestSuggestions = interestSuggestions.length > 0;
+
+    const handleApplyDestination = useCallback(
+        (value: string) => {
+            const normalized = value.trim();
+            if (!normalized) {
+                return;
+            }
+            setDestination(normalized);
+            setFormError(null);
+        },
+        [setFormError],
+    );
+
+    const handleApplyInterest = useCallback(
+        (value: string) => {
+            const token = value.trim();
+            if (!token) {
+                return;
+            }
+
+            setPreferences((current: string) => {
+                const normalized = current.trim();
+                const existing = normalized
+                    ? normalized
+                        .split(/[\n,，]/)
+                        .map((segment) => segment.trim())
+                        .filter(Boolean)
+                    : [];
+
+                if (existing.includes(token)) {
+                    return current;
+                }
+
+                return normalized ? `${normalized}\n${token}` : token;
+            });
+            setFormError(null);
+        },
+        [setFormError],
+    );
 
     const logVoiceTranscript = useCallback((text: string) => {
         if (!text.trim()) {
@@ -575,6 +639,40 @@ ${text}` : text));
                             rows={4}
                             className="form-input resize-none"
                         />
+                        {(hasDestinationSuggestions || hasInterestSuggestions) && (
+                            <div className="flex flex-col gap-2 rounded-2xl border border-slate-200/70 bg-slate-50/70 p-3 text-xs text-slate-600 dark:border-slate-700/60 dark:bg-slate-800/40 dark:text-slate-300">
+                                {hasDestinationSuggestions && (
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <span className="font-medium text-slate-500 dark:text-slate-400">常用目的地：</span>
+                                        {destinationSuggestions.map((item) => (
+                                            <button
+                                                key={`destination-${item}`}
+                                                type="button"
+                                                onClick={() => handleApplyDestination(item)}
+                                                className="rounded-full border border-emerald-300/60 px-3 py-1 text-[11px] font-semibold text-emerald-600 transition hover:bg-emerald-50 dark:border-emerald-500/40 dark:text-emerald-200 dark:hover:bg-emerald-500/10"
+                                            >
+                                                {item}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                                {hasInterestSuggestions && (
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <span className="font-medium text-slate-500 dark:text-slate-400">偏好标签：</span>
+                                        {interestSuggestions.map((item) => (
+                                            <button
+                                                key={`interest-${item}`}
+                                                type="button"
+                                                onClick={() => handleApplyInterest(item)}
+                                                className="rounded-full border border-slate-300/70 px-3 py-1 text-[11px] font-semibold text-slate-600 transition hover:border-emerald-400 hover:text-emerald-500 dark:border-slate-600 dark:text-slate-300 dark:hover:border-emerald-500/70 dark:hover:text-emerald-200"
+                                            >
+                                                {item}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
                         <button
                             type="button"
                             onClick={handleToggleListening}
