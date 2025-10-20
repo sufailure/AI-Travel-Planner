@@ -113,6 +113,15 @@ function collectPoiCandidates(plan: PlannerResult): PlannerGeoRequestItem[] {
         });
     };
 
+    for (const day of plan.dailyPlan ?? []) {
+        for (const activity of day.activities ?? []) {
+            push(activity, day.title || '每日行程');
+        }
+        for (const meal of day.meals ?? []) {
+            push(meal, `${day.title || '每日行程'} · 餐饮`);
+        }
+    }
+
     for (const accommodation of plan.accommodations ?? []) {
         push(accommodation, '住宿推荐');
     }
@@ -123,15 +132,6 @@ function collectPoiCandidates(plan: PlannerResult): PlannerGeoRequestItem[] {
 
     for (const tip of plan.transportation ?? []) {
         push(tip, '交通建议');
-    }
-
-    for (const day of plan.dailyPlan ?? []) {
-        for (const activity of day.activities ?? []) {
-            push(activity, day.title || '每日行程');
-        }
-        for (const meal of day.meals ?? []) {
-            push(meal, `${day.title || '每日行程'} · 餐饮`);
-        }
     }
 
     return entries.slice(0, 20);
