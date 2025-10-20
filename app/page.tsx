@@ -3,6 +3,7 @@ import { Plane } from 'lucide-react';
 import type { SupabaseClient, User } from '@supabase/supabase-js';
 import { CreateItineraryForm } from '@/components/dashboard/create-itinerary-form';
 import { ItineraryList } from '@/components/dashboard/itinerary-list';
+import { IntelligentPlanner } from '@/components/planner/intelligent-planner';
 import { ThemeToggle } from '@/components/theme/theme-toggle';
 import { createServerClient } from '@/lib/supabase/server';
 import type { Database } from '@/lib/supabase/types';
@@ -37,6 +38,8 @@ export default async function HomePage() {
                     查看即将出发的旅程，快速新建计划，并为后续的 AI 行程生成、语音助手与地图同步打好基础。
                 </p>
             </header>
+
+            <IntelligentPlanner />
 
             <section className="relative grid gap-10 lg:grid-cols-[1.15fr,0.85fr]">
                 <ItineraryList itineraries={itineraries} />
