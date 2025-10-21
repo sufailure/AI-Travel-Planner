@@ -55,30 +55,13 @@ CI/CD 已通过 GitHub Actions 将最新版镜像推送到 GitHub Container Regi
 		```
 3. 拉取镜像（仓库名会被转换为小写，如 `ghcr.io/sufailure/ai-travel-planner`）：
 		```bash
-		docker pull ghcr.io/sufailure/ai-travel-planner:latest
-		# 或者拉取指定提交镜像
 		docker pull ghcr.io/sufailure/ai-travel-planner:<git-sha>
 		```
 4. 运行容器时，将 `.env.local`（或相同格式的文件）提供给容器，保证 Supabase、语音识别等密钥在运行期可用：
 		```bash
-		docker run --rm -p 3000:3000 \
-			--env-file /path/to/.env.local \
-			ghcr.io/sufailure/ai-travel-planner:latest
+		docker run --rm -p 3000:3000 --env-file .env.local ghcr.io/sufailure/ai-travel-planner:<git-sha>
 		```
 
-### 2. 本地重新构建镜像
-
-若需修改镜像内容或在 CI 之外进行验证，需要在构建阶段传入 `NEXT_PUBLIC_*` 变量，这些值会在 Next.js 构建时写入前端代码：
-
-```bash
-docker build \
-	--build-arg NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL \
-	--build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY \
-	-t ai-travel-planner:latest .
-
-docker run --rm -p 3000:3000 \
-	--env-file .env.local \
-	ai-travel-planner:latest
 ```
 
 如需导出离线镜像，可执行：
