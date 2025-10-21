@@ -42,6 +42,51 @@ npm run dev
 - 因密钥存储在客户端，需提示最终用户每台浏览器都须单独配置 Key。
 - 可结合 Vercel Edge Functions 或 Supabase Edge Functions 扩展更多服务端能力。
 
+## Docker 使用说明（GHCR + 本地构建）
+
+CI/CD 已通过 GitHub Actions 将最新版镜像推送到 GitHub Container Registry（GHCR）。如果需要自定义构建或本地验证，也可以手动 `docker build`。以下是常见场景：
+
+### 1. 从 GHCR 获取现成镜像
+
+1. 在 GitHub 个人设置中生成具备 `read:packages` 权限的 Personal Access Token（经典 PAT/fine-grained PAT 均可）。
+2. 登录 GHCR：
+		```bash
+		echo <PAT> | docker login ghcr.io -u <GitHub 用户名> --password-stdin
+		```
+3. 拉取镜像（仓库名会被转换为小写，如 `ghcr.io/sufailure/ai-travel-planner`）：
+		```bash
+		docker pull ghcr.io/sufailure/ai-travel-planner:latest
+		# 或者拉取指定提交镜像
+		docker pull ghcr.io/sufailure/ai-travel-planner:<git-sha>
+		```
+4. 运行容器时，将 `.env.local`（或相同格式的文件）提供给容器，保证 Supabase、语音识别等密钥在运行期可用：
+		```bash
+		docker run --rm -p 3000:3000 \
+			--env-file /path/to/.env.local \
+			ghcr.io/sufailure/ai-travel-planner:latest
+		```
+
+### 2. 本地重新构建镜像
+
+若需修改镜像内容或在 CI 之外进行验证，需要在构建阶段传入 `NEXT_PUBLIC_*` 变量，这些值会在 Next.js 构建时写入前端代码：
+
+```bash
+docker build \
+	--build-arg NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL \
+	--build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY \
+	-t ai-travel-planner:latest .
+
+docker run --rm -p 3000:3000 \
+	--env-file .env.local \
+	ai-travel-planner:latest
+```
+
+如需导出离线镜像，可执行：
+
+```bash
+docker save ghcr.io/sufailure/ai-travel-planner:latest -o ai-travel-planner.tar
+```
+
 ## 常见问题（FAQ）
 
 1. **为何 Planner 提示需要配置 LLM Key？**
