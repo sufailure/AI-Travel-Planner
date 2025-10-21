@@ -17,6 +17,7 @@ function cn(...classes: Array<string | null | undefined | false>) {
 const NAV_ITEMS = [
     { href: '/', label: '首页' },
     { href: '/planner', label: '智能规划' },
+    { href: '/settings', label: '配置' },
 ];
 
 export function TopNavigation({ displayName }: TopNavigationProps) {
