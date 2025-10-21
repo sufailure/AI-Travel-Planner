@@ -32,7 +32,7 @@ export default async function PlannerPage() {
     );
 
     return (
-        <main className="relative mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-12 px-6 py-16 text-slate-900 dark:text-slate-100">
+        <main className="relative mx-auto flex min-h-screen w-full max-w-[1400px] flex-col gap-12 px-6 py-16 text-slate-900 dark:text-slate-100 lg:px-10">
             <PageBackground />
             <TopNavigation displayName={profile?.display_name ?? '旅行者'} />
 
@@ -65,7 +65,7 @@ export default async function PlannerPage() {
                 </div>
             </header>
 
-            <section className="grid gap-8 lg:grid-cols-[minmax(0,1.35fr),0.48fr]">
+            <section className="grid gap-10 xl:grid-cols-[minmax(0,1.1fr),minmax(260px,320px)]">
                 <IntelligentPlanner initialPreferences={initialPreferences} />
                 <div className="flex flex-col gap-6">
                     <div className="rounded-3xl border border-slate-200/80 bg-white/85 p-6 text-sm text-slate-600 shadow-lg shadow-slate-200/30 backdrop-blur dark:border-slate-700/60 dark:bg-slate-900/70 dark:text-slate-300">

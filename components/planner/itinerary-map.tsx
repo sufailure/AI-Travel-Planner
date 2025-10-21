@@ -358,7 +358,7 @@ export function ItineraryMap({ plan, destination }: ItineraryMapProps) {
                 {mapError ? (
                     <p className="p-6 text-sm text-rose-500 dark:text-rose-300">{mapError}</p>
                 ) : (
-                    <div ref={containerRef} className="h-72 w-full" />
+                    <div ref={containerRef} className="h-64 w-full md:h-80 xl:h-[32rem]" />
                 )}
             </div>
 

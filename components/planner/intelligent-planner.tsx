@@ -22,6 +22,17 @@ type GenerateResponse = {
     raw: string;
 };
 
+type SaveItineraryResponse = {
+    data?: {
+        id: string;
+        destination: string;
+        start_date: string;
+        end_date: string;
+        travelers: number;
+        budget: number | null;
+    };
+};
+
 type PlannerShowItineraryDetail = {
     id: string;
     destination?: string | null;
@@ -32,6 +43,17 @@ type PlannerShowItineraryDetail = {
     preferences?: string | null;
     plan?: unknown;
     rawPlan?: string | null;
+};
+
+type PlannerSnapshot = {
+    destination: string;
+    startDate: string;
+    endDate: string;
+    travelers: number;
+    budget: string;
+    preferences: string;
+    planSignature: string | null;
+    rawPlan: string | null;
 };
 
 function formatPreferenceText(preferences: UserTravelPreferences | null) {
@@ -114,6 +136,8 @@ export function IntelligentPlanner({ initialPreferences }: IntelligentPlannerPro
     const [saveMessage, setSaveMessage] = useState<string | null>(null);
     const [saveError, setSaveError] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
+    const [activeItineraryId, setActiveItineraryId] = useState<string | null>(null);
+    const [baselineSnapshot, setBaselineSnapshot] = useState<PlannerSnapshot | null>(null);
 
     const preferencesRef = useRef(preferences);
     const budgetRef = useRef(budget);
@@ -246,42 +270,51 @@ export function IntelligentPlanner({ initialPreferences }: IntelligentPlannerPro
             setStartDate(startValue);
             setEndDate(endValue);
 
-            if (typeof detail.travelers === 'number' && Number.isFinite(detail.travelers) && detail.travelers > 0) {
-                const travelerCount = Math.max(1, Math.round(detail.travelers));
-                setTravelers(travelerCount);
-            }
+            const travelerCount =
+                typeof detail.travelers === 'number' && Number.isFinite(detail.travelers) && detail.travelers > 0
+                    ? Math.max(1, Math.round(detail.travelers))
+                    : Math.max(1, travelersRef.current);
+            setTravelers(travelerCount);
 
-            if (typeof detail.budget === 'number' && Number.isFinite(detail.budget)) {
-                setBudget(String(detail.budget));
-            } else if (detail.budget === null) {
-                setBudget('');
-            }
+            const budgetValue =
+                typeof detail.budget === 'number' && Number.isFinite(detail.budget)
+                    ? String(detail.budget)
+                    : '';
+            setBudget(budgetValue);
 
-            if (typeof detail.preferences === 'string') {
-                setPreferences(detail.preferences.trim());
-            } else if (detail.preferences === null) {
-                setPreferences('');
-            }
+            const preferenceValue =
+                typeof detail.preferences === 'string' && detail.preferences.trim().length > 0
+                    ? detail.preferences.trim()
+                    : '';
+            setPreferences(preferenceValue);
 
-            if (detail.plan && isPlannerResult(detail.plan)) {
-                setResult(detail.plan);
-            } else {
-                setResult(null);
-            }
+            const loadedPlan = detail.plan && isPlannerResult(detail.plan) ? detail.plan : null;
+            setResult(loadedPlan);
+            const loadedRawPlan = typeof detail.rawPlan === 'string' ? detail.rawPlan : null;
+            setRawPlan(loadedRawPlan);
 
-            setRawPlan(detail.rawPlan ?? null);
+            const snapshot = createSnapshot({
+                destination: destinationValue,
+                startDate: startValue,
+                endDate: endValue,
+                travelers: travelerCount,
+                budget: budgetValue,
+                preferences: preferenceValue,
+                plan: loadedPlan,
+                rawPlan: loadedRawPlan,
+            });
+
+            setBaselineSnapshot(snapshot);
+            setActiveItineraryId(detail.id);
 
             setLastUsedDetails({
                 destination: destinationValue,
                 startDate: startValue,
                 endDate: endValue,
-                travelers:
-                    typeof detail.travelers === 'number' && Number.isFinite(detail.travelers) && detail.travelers > 0
-                        ? Math.max(1, Math.round(detail.travelers))
-                        : travelersRef.current,
+                travelers: travelerCount,
                 budget:
                     typeof detail.budget === 'number' && Number.isFinite(detail.budget) ? detail.budget : null,
-                preferences: detail.preferences ?? preferencesRef.current,
+                preferences: preferenceValue,
             });
         };
 
@@ -387,6 +420,58 @@ ${text}` : text));
         [applyParsedDetails, logVoiceTranscript],
     );
 
+    const currentSnapshot = useMemo(
+        () =>
+            createSnapshot({
+                destination,
+                startDate,
+                endDate,
+                travelers,
+                budget,
+                preferences,
+                plan: result,
+                rawPlan,
+            }),
+        [destination, startDate, endDate, travelers, budget, preferences, result, rawPlan],
+    );
+
+    const hasResult = Boolean(result);
+    const isExistingItinerary = Boolean(activeItineraryId);
+
+    const isDirty = useMemo(() => {
+        if (!hasResult) {
+            return false;
+        }
+
+        if (!isExistingItinerary) {
+            return true;
+        }
+
+        if (!baselineSnapshot) {
+            return true;
+        }
+
+        return !snapshotEquals(baselineSnapshot, currentSnapshot);
+    }, [baselineSnapshot, currentSnapshot, hasResult, isExistingItinerary]);
+
+    useEffect(() => {
+        if (isDirty) {
+            setSaveMessage(null);
+        }
+
+        if (!isDirty && isExistingItinerary) {
+            setSaveError(null);
+        }
+    }, [isDirty, isExistingItinerary]);
+
+    const saveButtonLabel = isExistingItinerary
+        ? isDirty
+            ? '更新我的行程'
+            : '已同步'
+        : '保存至我的行程';
+    const saveButtonDisabled = !hasResult || isSaving || (isExistingItinerary && !isDirty);
+    const saveButtonTitle = isExistingItinerary && !isDirty ? '当前行程未发生改动，无需保存。' : undefined;
+
     const {
         supportsSpeech,
         isListening,
@@ -473,6 +558,8 @@ ${text}` : text));
             setFormError(null);
             setResult(null);
             setRawPlan(null);
+            setSaveMessage(null);
+            setSaveError(null);
 
             try {
                 const response = await fetch('/api/itineraries/generate', {
@@ -507,20 +594,23 @@ ${text}` : text));
             return;
         }
 
+        if (isExistingItinerary && !isDirty) {
+            setSaveMessage('当前行程已是最新状态。');
+            return;
+        }
+
         const parsedFallback = preferences.trim().length > 0 ? parseTripDetails(preferences) : {};
         const destinationLabel =
             destination.trim() || lastUsedDetails?.destination || parsedFallback.destination || '智能行程';
 
         const dailySpan = Math.max(result.dailyPlan.length, 1);
-        const startCandidate =
-            lastUsedDetails?.startDate || startDate || parsedFallback.startDate || '';
+        const startCandidate = lastUsedDetails?.startDate || startDate || parsedFallback.startDate || '';
         let finalStart = ensureIsoDate(startCandidate);
         if (!finalStart) {
             finalStart = formatDateToIso(new Date());
         }
 
-        const endCandidate =
-            lastUsedDetails?.endDate || endDate || parsedFallback.endDate || '';
+        const endCandidate = lastUsedDetails?.endDate || endDate || parsedFallback.endDate || '';
         let finalEnd = ensureIsoDate(endCandidate);
         if (!finalEnd && finalStart) {
             finalEnd = addDays(finalStart, dailySpan - 1);
@@ -537,9 +627,10 @@ ${text}` : text));
         }
 
         const travelerCandidate = lastUsedDetails?.travelers ?? travelers;
-        const safeTravelers = Number.isFinite(travelerCandidate) && travelerCandidate > 0
-            ? Math.round(travelerCandidate)
-            : 1;
+        const safeTravelers =
+            Number.isFinite(travelerCandidate) && travelerCandidate > 0
+                ? Math.round(travelerCandidate)
+                : 1;
 
         const providedBudget = budget ? Number(budget) : lastUsedDetails?.budget ?? null;
         const normalizedBudget =
@@ -548,6 +639,7 @@ ${text}` : text));
                 : null;
         const planBudget = sumEstimatedBudget(result.estimatedBudget);
         const finalBudget = normalizedBudget ?? (planBudget > 0 ? planBudget : null);
+        const trimmedPreferences = preferences.trim();
 
         const payload = {
             title: `${destinationLabel} · 智能行程`,
@@ -556,18 +648,22 @@ ${text}` : text));
             endDate: finalEnd,
             travelers: safeTravelers,
             budget: finalBudget,
-            preferences,
+            preferences: trimmedPreferences,
             plan: result,
             rawPlan,
         };
+
+        const isUpdate = isExistingItinerary && typeof activeItineraryId === 'string';
+        const endpoint = isUpdate ? `/api/itineraries/${activeItineraryId}` : '/api/itineraries';
+        const method = isUpdate ? 'PATCH' : 'POST';
 
         setIsSaving(true);
         setSaveError(null);
         setSaveMessage(null);
 
         try {
-            const response = await fetch('/api/itineraries', {
-                method: 'POST',
+            const response = await fetch(endpoint, {
+                method,
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
             });
@@ -577,8 +673,39 @@ ${text}` : text));
                 throw new Error(errorPayload?.error ?? '行程保存失败，请稍后再试。');
             }
 
+            const responseBody = (await response.json()) as SaveItineraryResponse;
+            const saved = responseBody.data;
+
+            if (!saved) {
+                throw new Error('行程保存成功，但未返回最新数据。');
+            }
+
+            setActiveItineraryId(saved.id);
+
+            const nextSnapshot = createSnapshot({
+                destination: payload.destination,
+                startDate: payload.startDate,
+                endDate: payload.endDate,
+                travelers: payload.travelers,
+                budget: payload.budget,
+                preferences: trimmedPreferences,
+                plan: result,
+                rawPlan,
+            });
+
+            setBaselineSnapshot(nextSnapshot);
+            setBudget(nextSnapshot.budget);
+            setPreferences(nextSnapshot.preferences);
+            setLastUsedDetails({
+                destination: payload.destination,
+                startDate: payload.startDate,
+                endDate: payload.endDate,
+                travelers: payload.travelers,
+                budget: payload.budget,
+                preferences: trimmedPreferences,
+            });
             setSaveError(null);
-            setSaveMessage('行程已保存并同步到云端。');
+            setSaveMessage(isUpdate ? '修改已保存并覆盖原行程。' : '行程已保存并同步到云端。');
             router.refresh();
         } catch (error) {
             const message = error instanceof Error ? error.message : '行程保存失败，请稍后再试。';
@@ -586,7 +713,21 @@ ${text}` : text));
         } finally {
             setIsSaving(false);
         }
-    }, [result, preferences, destination, lastUsedDetails, startDate, endDate, budget, travelers, rawPlan, router]);
+    }, [
+        result,
+        isExistingItinerary,
+        isDirty,
+        preferences,
+        destination,
+        lastUsedDetails,
+        startDate,
+        endDate,
+        budget,
+        travelers,
+        rawPlan,
+        activeItineraryId,
+        router,
+    ]);
 
     const renderDailyPlan = () => {
         if (!result?.dailyPlan?.length) {
@@ -652,8 +793,8 @@ ${text}` : text));
                 </p>
             </header>
 
-            <div className="relative mt-6 grid gap-6 lg:grid-cols-[minmax(320px,360px),minmax(0,1fr)]">
-                <div className="flex flex-col">
+            <div className="relative mt-6 flex flex-col gap-6 lg:flex-row lg:items-start">
+                <div className="flex w-full flex-col lg:sticky lg:top-24 lg:max-w-xs xl:max-w-sm">
                     <form onSubmit={handleSubmit} className="grid gap-4">
                         <div className="grid gap-4 sm:grid-cols-2">
                             <label className="flex flex-col gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
@@ -812,16 +953,19 @@ ${text}` : text));
                         )}
                     </form>
                 </div>
-                <div className="relative flex min-h-[28rem] flex-col rounded-3xl border border-emerald-200/70 bg-emerald-50/80 p-6 text-slate-700 shadow-sm dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-slate-200">
+                <div className="relative flex min-h-[32rem] flex-1 flex-col overflow-hidden rounded-3xl border border-emerald-200/70 bg-white/95 p-6 text-slate-700 shadow-lg shadow-emerald-200/25 lg:p-8 dark:border-emerald-500/40 dark:bg-slate-900/70 dark:text-slate-200">
+                    <div className="pointer-events-none absolute -right-24 top-10 h-64 w-64 rounded-full bg-emerald-200/30 blur-3xl dark:bg-emerald-500/20" />
+                    <div className="pointer-events-none absolute -left-20 bottom-16 h-48 w-48 rounded-full bg-cyan-200/30 blur-3xl dark:bg-emerald-500/10" />
                     {result ? (
-                        <div className="flex h-full flex-col gap-5">
+                        <div className="relative z-10 flex h-full flex-col gap-5">
                             <div className="flex flex-wrap items-center gap-3 text-sm">
                                 <h3 className="text-lg font-semibold text-emerald-700 dark:text-emerald-200">AI 行程概览</h3>
                                 <button
                                     type="button"
                                     onClick={handleSavePlan}
-                                    disabled={isSaving}
-                                    className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-4 py-2 text-[11px] font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+                                    disabled={saveButtonDisabled}
+                                    title={saveButtonTitle}
+                                    className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-4 py-2 text-[11px] font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-emerald-500/70 disabled:text-white/80"
                                 >
                                     {isSaving ? (
                                         <>
@@ -829,7 +973,7 @@ ${text}` : text));
                                             保存中…
                                         </>
                                     ) : (
-                                        '保存至我的行程'
+                                        saveButtonLabel
                                     )}
                                 </button>
                                 {saveMessage && (
@@ -885,7 +1029,7 @@ ${text}` : text));
                             </div>
                         </div>
                     ) : (
-                        <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-sm text-emerald-700/80 dark:text-emerald-200/80">
+                        <div className="relative z-10 flex h-full flex-col items-center justify-center gap-3 text-center text-sm text-emerald-700/80 dark:text-emerald-200/80">
                             <p className="text-base font-semibold">生成的行程将在这里展示</p>
                             <p className="max-w-xs text-xs text-slate-600 dark:text-slate-400">
                                 填写左侧表单或选择已有行程，即可即时查看地图、每日安排与预算分析。
@@ -975,6 +1119,79 @@ function SectionList({ title, items }: SectionListProps) {
             </ul>
         </div>
     );
+}
+
+function createSnapshot({
+    destination,
+    startDate,
+    endDate,
+    travelers,
+    budget,
+    preferences,
+    plan,
+    rawPlan,
+}: {
+    destination?: string | null;
+    startDate?: string | null;
+    endDate?: string | null;
+    travelers?: number | null;
+    budget?: string | number | null;
+    preferences?: string | null;
+    plan: PlannerResult | null;
+    rawPlan?: string | null;
+}): PlannerSnapshot {
+    const normalizedBudget =
+        typeof budget === 'number'
+            ? Number.isFinite(budget)
+                ? String(budget)
+                : ''
+            : typeof budget === 'string'
+                ? budget.trim()
+                : '';
+
+    const normalizedRawPlan =
+        typeof rawPlan === 'string' && rawPlan.trim().length > 0 ? rawPlan : null;
+
+    return {
+        destination: typeof destination === 'string' ? destination.trim() : '',
+        startDate: typeof startDate === 'string' ? startDate : '',
+        endDate: typeof endDate === 'string' ? endDate : '',
+        travelers:
+            typeof travelers === 'number' && Number.isFinite(travelers) && travelers > 0
+                ? Math.round(travelers)
+                : 1,
+        budget: normalizedBudget,
+        preferences: typeof preferences === 'string' ? preferences.trim() : '',
+        planSignature: planSignatureOf(plan),
+        rawPlan: normalizedRawPlan,
+    };
+}
+
+function snapshotEquals(first: PlannerSnapshot | null, second: PlannerSnapshot | null) {
+    if (!first || !second) {
+        return false;
+    }
+    return (
+        first.destination === second.destination &&
+        first.startDate === second.startDate &&
+        first.endDate === second.endDate &&
+        first.travelers === second.travelers &&
+        first.budget === second.budget &&
+        first.preferences === second.preferences &&
+        first.planSignature === second.planSignature &&
+        first.rawPlan === second.rawPlan
+    );
+}
+
+function planSignatureOf(plan: PlannerResult | null) {
+    if (!plan) {
+        return null;
+    }
+    try {
+        return JSON.stringify(plan);
+    } catch (_error) {
+        return `${Date.now()}`;
+    }
 }
 
 type ParsedTripDetails = {
