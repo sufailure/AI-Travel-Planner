@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, MapPin, Navigation, Route as RouteIcon } from 'lucide-react';
 import { useItineraryMapPoints } from '@/lib/client/use-itinerary-map-points';
 import { useItineraryDirections } from '@/lib/client/use-itinerary-directions';
-import type { PlannerResult } from '@/lib/types/planner';
+import type { PlannerMapPoint, PlannerResult } from '@/lib/types/planner';
 
 const AMAP_SCRIPT_BASE = 'https://webapi.amap.com/maps';
 const AMAP_VERSION = '2.0';
@@ -100,6 +100,25 @@ export function ItineraryMap({ plan, destination }: ItineraryMapProps) {
 
     const markersRef = useRef<Array<{ id: string; marker: any }>>([]);
     const routePolylineRef = useRef<any>(null);
+
+    const groupedPoints = useMemo(() => {
+        if (!points.length) {
+            return [] as Array<{ key: string; label: string; points: PlannerMapPoint[] }>;
+        }
+
+        const map = new Map<string, { key: string; label: string; points: PlannerMapPoint[] }>();
+
+        points.forEach((point) => {
+            const label = point.groupLabel || point.source || '行程推荐';
+            const key = point.groupId || `label-${label}`;
+            if (!map.has(key)) {
+                map.set(key, { key, label, points: [] });
+            }
+            map.get(key)!.points.push(point);
+        });
+
+        return Array.from(map.values());
+    }, [points]);
 
     useEffect(() => {
         if (startPointId && !points.some((point) => point.id === startPointId)) {
@@ -463,45 +482,55 @@ export function ItineraryMap({ plan, destination }: ItineraryMapProps) {
                 {loading && <p>正在定位推荐地点…</p>}
                 {error && <p className="text-rose-500 dark:text-rose-300">{error}</p>}
                 {!loading && !error && points.length === 0 && <p>暂无可定位的地点，试着让 AI 给出更具体的景点或酒店名称。</p>}
-                {points.length > 0 && (
-                    <ul className="grid gap-2 sm:grid-cols-2">
-                        {points.map((point) => (
-                            <li key={point.id} className="rounded-xl border border-slate-200/70 bg-white/80 px-3 py-2 dark:border-slate-700/60 dark:bg-slate-800/40">
-                                <p className="text-sm font-medium text-slate-700 dark:text-slate-200">{point.label}</p>
-                                <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                                    来源：{point.source}
-                                </p>
-                                {point.address && (
-                                    <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">{point.address}</p>
-                                )}
-                                <div className="mt-2 flex flex-wrap items-center gap-2">
-                                    <button
-                                        type="button"
-                                        onClick={() => handleSetStart(point.id)}
-                                        className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition ${startPointId === point.id ? 'border-emerald-500 bg-emerald-50 text-emerald-600 dark:border-emerald-400/70 dark:bg-emerald-500/10 dark:text-emerald-200' : 'border-slate-300 text-slate-500 hover:border-emerald-400 hover:text-emerald-500 dark:border-slate-600 dark:text-slate-300 dark:hover:border-emerald-500/70 dark:hover:text-emerald-200'}`}
-                                    >
-                                        设为起点
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => handleSetEnd(point.id)}
-                                        className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition ${endPointId === point.id ? 'border-emerald-500 bg-emerald-50 text-emerald-600 dark:border-emerald-400/70 dark:bg-emerald-500/10 dark:text-emerald-200' : 'border-slate-300 text-slate-500 hover:border-emerald-400 hover:text-emerald-500 dark:border-slate-600 dark:text-slate-300 dark:hover:border-emerald-500/70 dark:hover:text-emerald-200'}`}
-                                    >
-                                        设为终点
-                                    </button>
-                                    <a
-                                        href={`https://www.amap.com/search?keywords=${encodeURIComponent(point.label)}`}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 hover:text-emerald-500"
-                                    >
-                                        <Navigation className="h-3 w-3" aria-hidden />
-                                        查看
-                                    </a>
-                                </div>
-                            </li>
+                {groupedPoints.length > 0 && (
+                    <div className="space-y-3">
+                        {groupedPoints.map((group) => (
+                            <section key={group.key} className="rounded-2xl border border-slate-200/70 bg-white/80 p-3 dark:border-slate-700/60 dark:bg-slate-800/40">
+                                <header className="flex items-center justify-between gap-2 text-[11px] font-semibold text-slate-500 dark:text-slate-300">
+                                    <span>{group.label}</span>
+                                    <span className="text-[10px] text-slate-400 dark:text-slate-500">{group.points.length} 个地点</span>
+                                </header>
+                                <ul className="mt-2 grid gap-2 sm:grid-cols-2">
+                                    {group.points.map((point) => (
+                                        <li key={point.id} className="rounded-xl border border-slate-200/70 bg-white/90 px-3 py-2 dark:border-slate-600 dark:bg-slate-900/40">
+                                            <p className="text-sm font-medium text-slate-700 dark:text-slate-200">{point.label}</p>
+                                            <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                                                来源：{point.source}
+                                            </p>
+                                            {point.address && (
+                                                <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">{point.address}</p>
+                                            )}
+                                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleSetStart(point.id)}
+                                                    className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition ${startPointId === point.id ? 'border-emerald-500 bg-emerald-50 text-emerald-600 dark:border-emerald-400/70 dark:bg-emerald-500/10 dark:text-emerald-200' : 'border-slate-300 text-slate-500 hover:border-emerald-400 hover:text-emerald-500 dark:border-slate-600 dark:text-slate-300 dark:hover:border-emerald-500/70 dark:hover:text-emerald-200'}`}
+                                                >
+                                                    设为起点
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleSetEnd(point.id)}
+                                                    className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition ${endPointId === point.id ? 'border-emerald-500 bg-emerald-50 text-emerald-600 dark:border-emerald-400/70 dark:bg-emerald-500/10 dark:text-emerald-200' : 'border-slate-300 text-slate-500 hover:border-emerald-400 hover:text-emerald-500 dark:border-slate-600 dark:text-slate-300 dark:hover:border-emerald-500/70 dark:hover:text-emerald-200'}`}
+                                                >
+                                                    设为终点
+                                                </button>
+                                                <a
+                                                    href={`https://www.amap.com/search?keywords=${encodeURIComponent(point.label)}`}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 hover:text-emerald-500"
+                                                >
+                                                    <Navigation className="h-3 w-3" aria-hidden />
+                                                    查看
+                                                </a>
+                                            </div>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </section>
                         ))}
-                    </ul>
+                    </div>
                 )}
             </footer>
         </section>

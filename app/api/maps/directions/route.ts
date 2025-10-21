@@ -55,6 +55,7 @@ export async function POST(request: NextRequest) {
     url.searchParams.set('origin', `${origin.lng},${origin.lat}`);
     url.searchParams.set('destination', `${destination.lng},${destination.lat}`);
     url.searchParams.set('output', 'JSON');
+    url.searchParams.set('show_fields', 'polyline');
 
     try {
         const response = await fetch(url.toString());
@@ -97,9 +98,13 @@ export async function POST(request: NextRequest) {
             duration: Number(step.duration ?? 0),
         }));
 
-        const polylinePoints = extractPolylinePoints(primaryPath);
+        let polylinePoints = extractPolylinePoints(primaryPath);
 
         if (polylinePoints.length === 0) {
+            polylinePoints = buildFallbackPolyline(origin, destination);
+        }
+
+        if (polylinePoints.length < 2) {
             return NextResponse.json(
                 { error: '未能解析路线轨迹，请稍后重试。' },
                 { status: 502 },
@@ -206,4 +211,22 @@ function extractPolylinePoints(path: {
     }
 
     return points;
+}
+
+function buildFallbackPolyline(
+    origin: { lat: number; lng: number },
+    destination: { lat: number; lng: number },
+): Array<{ lat: number; lng: number }> {
+    if (!isValidCoordinate(origin) || !isValidCoordinate(destination)) {
+        return [];
+    }
+
+    const start = { lat: origin.lat, lng: origin.lng };
+    const end = { lat: destination.lat, lng: destination.lng };
+
+    if (start.lat === end.lat && start.lng === end.lng) {
+        return [start, end];
+    }
+
+    return [start, end];
 }

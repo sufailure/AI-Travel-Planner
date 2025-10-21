@@ -55,6 +55,8 @@ export function useItineraryMapPoints(plan: PlannerResult | null, destination: s
                         label?: string;
                         source?: string;
                         address?: string | null;
+                        groupId?: string | null;
+                        groupLabel?: string | null;
                         location: { lat: number; lng: number };
                     }>;
                 };
@@ -67,6 +69,8 @@ export function useItineraryMapPoints(plan: PlannerResult | null, destination: s
                     lat: item.location.lat,
                     lng: item.location.lng,
                     address: item.address ?? null,
+                    groupId: item.groupId ?? null,
+                    groupLabel: item.groupLabel ?? null,
                 }));
 
                 if (!aborted) {
@@ -95,12 +99,12 @@ function collectPoiCandidates(plan: PlannerResult): PlannerGeoRequestItem[] {
     const entries: PlannerGeoRequestItem[] = [];
     const seen = new Set<string>();
 
-    const push = (raw: string, source: string) => {
+    const push = (raw: string, source: string, group?: { id: string; label: string }) => {
         const query = normalisePoiName(raw);
         if (!query) {
             return;
         }
-        const key = `${source}:${query.toLowerCase()}`;
+        const key = `${group?.id ?? source}:${query.toLowerCase()}`;
         if (seen.has(key)) {
             return;
         }
@@ -110,28 +114,34 @@ function collectPoiCandidates(plan: PlannerResult): PlannerGeoRequestItem[] {
             query,
             label: raw.trim(),
             source,
+            groupId: group?.id ?? null,
+            groupLabel: group?.label ?? null,
         });
     };
 
-    for (const day of plan.dailyPlan ?? []) {
+    (plan.dailyPlan ?? []).forEach((day, dayIndex) => {
+        const group = {
+            id: `day-${dayIndex + 1}`,
+            label: day.title || `行程第 ${dayIndex + 1} 天`,
+        };
         for (const activity of day.activities ?? []) {
-            push(activity, day.title || '每日行程');
+            push(activity, day.title || '每日行程', group);
         }
         for (const meal of day.meals ?? []) {
-            push(meal, `${day.title || '每日行程'} · 餐饮`);
+            push(meal, `${day.title || '每日行程'} · 餐饮`, group);
         }
-    }
+    });
 
     for (const accommodation of plan.accommodations ?? []) {
-        push(accommodation, '住宿推荐');
+        push(accommodation, '住宿推荐', { id: 'accommodations', label: '住宿推荐' });
     }
 
     for (const restaurant of plan.restaurants ?? []) {
-        push(restaurant, '餐饮推荐');
+        push(restaurant, '餐饮推荐', { id: 'restaurants', label: '餐饮推荐' });
     }
 
     for (const tip of plan.transportation ?? []) {
-        push(tip, '交通建议');
+        push(tip, '交通建议', { id: 'transportation', label: '交通建议' });
     }
 
     return entries.slice(0, 20);

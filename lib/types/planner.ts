@@ -32,6 +32,8 @@ export type PlannerMapPoint = {
     lat: number;
     lng: number;
     address?: string | null;
+    groupId?: string | null;
+    groupLabel?: string | null;
 };
 
 export type PlannerGeoRequestItem = {
@@ -39,6 +41,8 @@ export type PlannerGeoRequestItem = {
     query: string;
     label: string;
     source: string;
+    groupId?: string | null;
+    groupLabel?: string | null;
 };
 
 export type PlannerResultJson = Json;

@@ -516,42 +516,44 @@ ${text}` : text));
         }
 
         return (
-            <div className="mt-6 grid gap-4">
-                {result.dailyPlan.map((day, index) => (
-                    <div
-                        key={`${day.title}-${index}`}
-                        className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm dark:border-slate-700/60 dark:bg-slate-900/60"
-                    >
-                        <div className="flex flex-col gap-2">
-                            <h4 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-                                {day.title}
-                            </h4>
-                            {day.summary && (
-                                <p className="text-sm text-slate-600 dark:text-slate-300">{day.summary}</p>
-                            )}
-                        </div>
-                        {day.activities.length > 0 && (
-                            <ul className="mt-3 space-y-2 text-sm text-slate-600 dark:text-slate-300">
-                                {day.activities.map((activity, activityIndex) => (
-                                    <li key={`${activity}-${activityIndex}`} className="flex items-start gap-2">
-                                        <span className="mt-1 h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden />
-                                        <span>{activity}</span>
-                                    </li>
-                                ))}
-                            </ul>
-                        )}
-                        {day.meals.length > 0 && (
-                            <div className="mt-3 text-sm text-slate-600 dark:text-slate-300">
-                                <p className="font-medium text-emerald-600 dark:text-emerald-300">餐饮建议</p>
-                                <ul className="mt-1 space-y-1">
-                                    {day.meals.map((meal, mealIndex) => (
-                                        <li key={`${meal}-${mealIndex}`}>{meal}</li>
+            <div className="mt-6 overflow-x-auto pb-2">
+                <div className="flex min-w-max gap-4 snap-x snap-mandatory">
+                    {result.dailyPlan.map((day, index) => (
+                        <div
+                            key={`${day.title}-${index}`}
+                            className="flex w-72 shrink-0 snap-start flex-col rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm transition hover:shadow-md dark:border-slate-700/60 dark:bg-slate-900/60"
+                        >
+                            <div className="flex flex-col gap-2">
+                                <h4 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                                    {day.title}
+                                </h4>
+                                {day.summary && (
+                                    <p className="text-sm text-slate-600 dark:text-slate-300">{day.summary}</p>
+                                )}
+                            </div>
+                            {day.activities.length > 0 && (
+                                <ul className="mt-3 space-y-2 text-sm text-slate-600 dark:text-slate-300">
+                                    {day.activities.map((activity, activityIndex) => (
+                                        <li key={`${activity}-${activityIndex}`} className="flex items-start gap-2">
+                                            <span className="mt-1 h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden />
+                                            <span>{activity}</span>
+                                        </li>
                                     ))}
                                 </ul>
-                            </div>
-                        )}
-                    </div>
-                ))}
+                            )}
+                            {day.meals.length > 0 && (
+                                <div className="mt-3 text-sm text-slate-600 dark:text-slate-300">
+                                    <p className="font-medium text-emerald-600 dark:text-emerald-300">餐饮建议</p>
+                                    <ul className="mt-1 space-y-1">
+                                        {day.meals.map((meal, mealIndex) => (
+                                            <li key={`${meal}-${mealIndex}`}>{meal}</li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                        </div>
+                    ))}
+                </div>
             </div>
         );
     };

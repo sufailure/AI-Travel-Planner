@@ -12,7 +12,14 @@ export async function POST(request: NextRequest) {
 
     const body = (await request.json().catch(() => null)) as
         | {
-            items?: Array<{ id?: string; query?: string; label?: string; source?: string }>;
+            items?: Array<{
+                id?: string;
+                query?: string;
+                label?: string;
+                source?: string;
+                groupId?: string | null;
+                groupLabel?: string | null;
+            }>;
             city?: string | null;
         }
         | null;
@@ -39,6 +46,8 @@ export async function POST(request: NextRequest) {
                         query,
                         label: item.label ?? query,
                         source: item.source ?? '行程推荐',
+                        groupId: item.groupId ?? null,
+                        groupLabel: item.groupLabel ?? item.source ?? null,
                         name: result.formattedAddress ?? query,
                         address: result.formattedAddress ?? null,
                         location: {
