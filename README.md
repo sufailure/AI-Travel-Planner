@@ -44,25 +44,25 @@ npm run dev
 
 ## Docker 使用说明（GHCR + 本地构建）
 
-CI/CD 已通过 GitHub Actions 将最新版镜像推送到 GitHub Container Registry（GHCR）。如果需要自定义构建或本地验证，也可以手动 `docker build`。以下是常见场景：
+CI/CD 会自动把最新镜像推送到 GitHub Container Registry（GHCR）。如需本地调试或自定义镜像，可参考以下两种方式：
 
-### 1. 从 GHCR 获取现成镜像
+### 1. 直接拉取 GHCR 镜像
 
-1. 在 GitHub 个人设置中生成具备 `read:packages` 权限的 Personal Access Token（经典 PAT/fine-grained PAT 均可）。
+1. 在 GitHub 个人设置中生成具备 `read:packages` 权限的 Personal Access Token（经典 PAT 或 fine-grained PAT 均可）。
 2. 登录 GHCR：
-		```bash
-		echo <PAT> | docker login ghcr.io -u <GitHub 用户名> --password-stdin
-		```
-3. 拉取镜像（仓库名会被转换为小写，如 `ghcr.io/sufailure/ai-travel-planner`）：
-		```bash
-		docker pull ghcr.io/sufailure/ai-travel-planner:<git-sha>
-		```
-4. 运行容器时，将 `.env.local`（或相同格式的文件）提供给容器，保证 Supabase、语音识别等密钥在运行期可用：
-		```bash
-		docker run --rm -p 3000:3000 --env-file .env.local ghcr.io/sufailure/ai-travel-planner:<git-sha>
-		```
+	 ```bash
+	 echo <PAT> | docker login ghcr.io -u <GitHub 用户名> --password-stdin
+	 ```
+3. 拉取镜像（仓库名会被转换为小写，例如 `ghcr.io/sufailure/ai-travel-planner`）：
+	 ```bash
+	 docker pull ghcr.io/sufailure/ai-travel-planner:<git-sha>
+	 ```
+4. 使用 `.env.local`（或等价文件）为容器注入 Supabase、讯飞、地图等运行期密钥：
+	 ```bash
+	 docker run --rm -p 3000:3000  --env-file .env.local ghcr.io/sufailure/ai-travel-planner:<git-sha>
+	 ```
 
-```
+
 
 如需导出离线镜像，可执行：
 
