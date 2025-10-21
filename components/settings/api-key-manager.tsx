@@ -8,22 +8,27 @@ import {
     Eye,
     EyeOff,
     KeyRound,
+    Loader2,
+    Sparkles,
     Trash2,
     Wand2,
 } from 'lucide-react';
 
-const STORAGE_KEY = 'ai-travel-planner.api-keys';
+import {
+    loadActiveLlmKeyId,
+    loadStoredApiKeys,
+    persistActiveLlmKeyId,
+    persistStoredApiKeys,
+    removeStoredApiKey,
+    resolveActiveLlmKeyValue,
+    upsertStoredApiKey,
+    type StoredApiKey,
+} from '@/lib/client/llm-key-storage';
+
 const INPUT_STYLE =
     'rounded-2xl border border-slate-300/70 bg-white px-4 py-2 text-[13px] text-slate-700 shadow-inner shadow-slate-100 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200 dark:border-slate-600 dark:bg-slate-900/70 dark:text-slate-200 dark:shadow-none dark:focus:border-emerald-400/70 dark:focus:ring-emerald-500/20';
 const TEXTAREA_STYLE =
     'min-h-[200px] w-full resize-y rounded-2xl border border-slate-300/70 bg-white px-4 py-3 text-sm leading-relaxed text-slate-700 shadow-inner shadow-slate-100 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200 dark:border-slate-600 dark:bg-slate-900/70 dark:text-slate-200 dark:shadow-none dark:focus:border-emerald-400/70 dark:focus:ring-emerald-500/20';
-
-type StoredApiKey = {
-    id: string;
-    label: string;
-    value: string;
-    createdAt: number;
-};
 
 type VisibilityState = Record<string, boolean>;
 
@@ -163,6 +168,7 @@ const smartParseApiKeys = (input: string): Array<{ label: string; value: string;
 
 export function ApiKeyManager() {
     const [entries, setEntries] = useState<StoredApiKey[]>([]);
+    const [activeId, setActiveId] = useState<string | null>(null);
     const [label, setLabel] = useState('');
     const [value, setValue] = useState('');
     const [rawInput, setRawInput] = useState('');
@@ -171,31 +177,32 @@ export function ApiKeyManager() {
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [visibility, setVisibility] = useState<VisibilityState>({});
     const [copiedId, setCopiedId] = useState<string | null>(null);
+    const [verifyingId, setVerifyingId] = useState<string | null>(null);
     const [toastMessage, setToastMessage] = useState<string | null>(null);
 
     useEffect(() => {
         if (typeof window === 'undefined') {
             return;
         }
-        try {
-            const raw = window.localStorage.getItem(STORAGE_KEY);
-            if (!raw) {
-                return;
-            }
-            const parsed = JSON.parse(raw) as StoredApiKey[];
-            if (Array.isArray(parsed)) {
-                setEntries(parsed);
-            }
-        } catch (error) {
-            console.error('Failed to parse stored api keys', error);
+
+        const storedEntries = loadStoredApiKeys();
+        setEntries(storedEntries);
+
+        const storedActiveId = loadActiveLlmKeyId();
+        if (storedActiveId && storedEntries.some((entry) => entry.id === storedActiveId)) {
+            setActiveId(storedActiveId);
+            return;
+        }
+
+        if (storedEntries[0]) {
+            const fallbackId = storedEntries[0].id;
+            setActiveId(fallbackId);
+            persistActiveLlmKeyId(fallbackId);
         }
     }, []);
 
-    const persist = useCallback((next: StoredApiKey[]) => {
-        if (typeof window === 'undefined') {
-            return;
-        }
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    const persistEntries = useCallback((next: StoredApiKey[]) => {
+        persistStoredApiKeys(next);
     }, []);
 
     const resetForm = useCallback(() => {
@@ -245,45 +252,58 @@ export function ApiKeyManager() {
 
             setErrorMessage(null);
 
+            let savedEntryId: string | null = null;
             setEntries((prev) => {
-                const existingIndex = prev.findIndex((item) => item.label === normalizedLabel);
-                const nextEntries = [...prev];
+                const nextEntries = upsertStoredApiKey(prev, {
+                    label: normalizedLabel,
+                    value: normalizedValue,
+                });
 
-                if (existingIndex >= 0) {
-                    nextEntries[existingIndex] = {
-                        ...nextEntries[existingIndex],
-                        value: normalizedValue,
-                        createdAt: Date.now(),
-                    };
-                } else {
-                    nextEntries.unshift({
-                        id: createId(),
-                        label: normalizedLabel,
-                        value: normalizedValue,
-                        createdAt: Date.now(),
-                    });
-                }
+                persistEntries(nextEntries);
 
-                persist(nextEntries);
+                const updated = nextEntries.find((item) => item.label === normalizedLabel);
+                savedEntryId = updated?.id ?? resolveActiveLlmKeyValue(nextEntries).id;
+
                 return nextEntries;
             });
+
+            if (savedEntryId) {
+                setActiveId(savedEntryId);
+                persistActiveLlmKeyId(savedEntryId);
+            }
 
             setStatusMessage('已保存到本地浏览器，仅当前设备可见。');
             resetForm();
         },
-        [label, persist, resetForm, value],
+        [label, persistEntries, resetForm, value],
     );
 
     const handleDelete = useCallback(
         (id: string) => {
+            let nextEntriesSnapshot: StoredApiKey[] = [];
+
             setEntries((prev) => {
-                const nextEntries = prev.filter((item) => item.id !== id);
-                persist(nextEntries);
+                const nextEntries = removeStoredApiKey(prev, id);
+                persistEntries(nextEntries);
+                nextEntriesSnapshot = nextEntries;
                 return nextEntries;
             });
+
+            const nextActiveId = (() => {
+                if (nextEntriesSnapshot.length === 0) {
+                    return null;
+                }
+                if (activeId && activeId !== id && nextEntriesSnapshot.some((entry) => entry.id === activeId)) {
+                    return activeId;
+                }
+                return nextEntriesSnapshot[0].id;
+            })();
+
+            setActiveId(nextActiveId);
+            persistActiveLlmKeyId(nextActiveId);
             setStatusMessage('已删除该密钥。');
         },
-        [persist],
+        [activeId, persistEntries],
     );
 
     const handleToggleVisibility = useCallback((id: string) => {
@@ -291,6 +311,55 @@ export function ApiKeyManager() {
             ...prev,
             [id]: !prev[id],
         }));
+    }, []);
+
+    const handleSetActive = useCallback(
+        (id: string) => {
+            if (id === activeId) {
+                setStatusMessage('该密钥已经在使用中。');
+                return;
+            }
+
+            setActiveId(id);
+            persistActiveLlmKeyId(id);
+            setStatusMessage('已设为当前使用的密钥。');
+        },
+        [activeId],
+    );
+
+    const handleVerify = useCallback(async (id: string, keyValue: string) => {
+        const normalizedValue = keyValue.trim();
+        if (!normalizedValue) {
+            setErrorMessage('该密钥为空，无法验证。');
+            return;
+        }
+
+        setVerifyingId(id);
+        setErrorMessage(null);
+        setStatusMessage(null);
+
+        try {
+            const response = await fetch('/api/llm/verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ llmKey: normalizedValue }),
+            });
+
+            const result = (await response.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+
+            if (!response.ok || !result.ok) {
+                const detail = typeof result.error === 'string' ? result.error.trim() : '';
+                setErrorMessage(detail || '验证失败，请检查密钥是否正确或稍后再试。');
+                return;
+            }
+
+            setStatusMessage('验证成功，可用于智能规划。');
+        } catch (error) {
+            console.error('Verify LLM key failed', error);
+            setErrorMessage('验证失败，请检查网络连接或稍后再试。');
+        } finally {
+            setVerifyingId(null);
+        }
     }, []);
 
     const handleCopy = useCallback(async (id: string, keyValue: string) => {
@@ -347,37 +416,36 @@ export function ApiKeyManager() {
 
     const handleApplyAndSave = useCallback(
         (candidate: ParsedCandidate) => {
+            const normalizedLabel = candidate.label.trim() || '未命名密钥';
+            const normalizedValue = candidate.value.trim();
+            let savedEntryId: string | null = null;
+
             setEntries((prev) => {
-                const normalizedLabel = candidate.label.trim() || '未命名密钥';
-                const normalizedValue = candidate.value.trim();
-                const existingIndex = prev.findIndex((item) => item.label === normalizedLabel);
-                const nextEntries = [...prev];
+                const nextEntries = upsertStoredApiKey(prev, {
+                    label: normalizedLabel,
+                    value: normalizedValue,
+                });
 
-                if (existingIndex >= 0) {
-                    nextEntries[existingIndex] = {
-                        ...nextEntries[existingIndex],
-                        value: normalizedValue,
-                        createdAt: Date.now(),
-                    };
-                } else {
-                    nextEntries.unshift({
-                        id: createId(),
-                        label: normalizedLabel,
-                        value: normalizedValue,
-                        createdAt: Date.now(),
-                    });
-                }
+                persistEntries(nextEntries);
 
-                persist(nextEntries);
+                const updated = nextEntries.find(
+                    (item) => item.label === normalizedLabel && item.value === normalizedValue,
+                );
+                savedEntryId = updated?.id ?? resolveActiveLlmKeyValue(nextEntries).id;
+
                 return nextEntries;
             });
 
-            const normalizedLabel = candidate.label.trim() || '未命名密钥';
+            if (savedEntryId) {
+                setActiveId(savedEntryId);
+                persistActiveLlmKeyId(savedEntryId);
+            }
+
             setLabel(normalizedLabel);
             setValue(candidate.value);
             setToastMessage('已自动保存到本地。');
         },
-        [persist],
+        [persistEntries],
     );
 
     useEffect(() => {
@@ -399,6 +467,11 @@ export function ApiKeyManager() {
     const sortedEntries = useMemo(
         () => [...entries].sort((a, b) => b.createdAt - a.createdAt),
         [entries],
+    );
+
+    const activeEntry = useMemo(
+        () => entries.find((entry) => entry.id === activeId) ?? null,
+        [activeId, entries],
     );
 
     return (
@@ -547,6 +620,14 @@ export function ApiKeyManager() {
 
                 <section className="rounded-3xl border border-slate-200/70 bg-white/85 p-6 shadow-lg shadow-emerald-200/20 dark:border-slate-700/60 dark:bg-slate-900/70">
                     <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200">已保存的密钥</h2>
+                    <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+                        当前用于智能规划：
+                        {activeEntry ? (
+                            <span className="ml-1 font-semibold text-slate-700 dark:text-slate-200">{activeEntry.label}</span>
+                        ) : (
+                            <span className="ml-1 text-slate-400 dark:text-slate-500">尚未选择，请设置一个密钥。</span>
+                        )}
+                    </p>
                     {sortedEntries.length === 0 ? (
                         <p className="mt-4 rounded-2xl border border-dashed border-slate-300/70 bg-slate-50/80 px-4 py-6 text-center text-xs text-slate-500 dark:border-slate-700/60 dark:bg-slate-800/40 dark:text-slate-400">
                             尚未保存任何 API Key，可通过上方表单添加。
@@ -557,6 +638,7 @@ export function ApiKeyManager() {
                                 const isVisible = visibility[entry.id];
                                 const displayValue = isVisible ? entry.value : maskKey(entry.value);
                                 const isCopied = copiedId === entry.id;
+                                const isActive = entry.id === activeId;
 
                                 return (
                                     <li
@@ -566,6 +648,11 @@ export function ApiKeyManager() {
                                         <div className="flex flex-col gap-1 sm:flex-1 sm:min-w-0">
                                             <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                                                 {entry.label}
+                                                {isActive && (
+                                                    <span className="ml-2 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest text-emerald-600 dark:bg-emerald-400/10 dark:text-emerald-200">
+                                                        当前使用
+                                                    </span>
+                                                )}
                                             </span>
                                             <span className="max-w-full break-all font-mono text-sm text-slate-700 dark:text-slate-200">{displayValue}</span>
                                             <span className="text-[11px] text-slate-400 dark:text-slate-500">
@@ -573,6 +660,45 @@ export function ApiKeyManager() {
                                             </span>
                                         </div>
                                         <div className="flex flex-wrap items-center gap-2 text-xs font-medium">
+                                            <button
+                                                type="button"
+                                                onClick={() => handleSetActive(entry.id)}
+                                                disabled={isActive}
+                                                className={`inline-flex items-center gap-1 rounded-full px-3 py-1 transition ${isActive
+                                                        ? 'cursor-default border border-emerald-500 bg-emerald-500 text-white dark:border-emerald-400/80 dark:bg-emerald-500/90 dark:text-slate-900'
+                                                        : 'border border-emerald-300 text-emerald-500 hover:border-emerald-400 hover:bg-emerald-100/80 dark:border-emerald-500/50 dark:text-emerald-200 dark:hover:border-emerald-400/70 dark:hover:bg-emerald-500/15'
+                                                    }`}
+                                            >
+                                                {isActive ? (
+                                                    <>
+                                                        <Check className="h-3.5 w-3.5" aria-hidden />
+                                                        当前使用
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <KeyRound className="h-3.5 w-3.5" aria-hidden />
+                                                        设为当前
+                                                    </>
+                                                )}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleVerify(entry.id, entry.value)}
+                                                disabled={verifyingId === entry.id}
+                                                className="inline-flex items-center gap-1 rounded-full border border-slate-300 px-3 py-1 transition hover:border-emerald-400 hover:text-emerald-500 disabled:cursor-not-allowed disabled:opacity-70 dark:border-slate-600 dark:text-slate-300 dark:hover:border-emerald-400/70 dark:hover:text-emerald-200"
+                                            >
+                                                {verifyingId === entry.id ? (
+                                                    <>
+                                                        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                                                        验证中
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Sparkles className="h-3.5 w-3.5" aria-hidden />
+                                                        验证可用性
+                                                    </>
+                                                )}
+                                            </button>
                                             <button
                                                 type="button"
                                                 onClick={() => handleToggleVisibility(entry.id)}

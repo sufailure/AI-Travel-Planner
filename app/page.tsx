@@ -155,9 +155,7 @@ function LandingSection() {
                 >
                     立即体验智能行程
                 </Link>
-                <button className="rounded-2xl border border-slate-300/80 bg-white/80 px-6 py-4 text-base font-medium text-slate-700 backdrop-blur transition hover:border-slate-300 hover:bg-white dark:border-slate-700/70 dark:bg-slate-900/70 dark:text-slate-200 dark:hover:border-slate-500/80 dark:hover:bg-slate-900">
-                    了解功能与路线模板（敬请期待）
-                </button>
+                
             </div>
         </main>
     );

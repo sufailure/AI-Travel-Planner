@@ -40,6 +40,8 @@ type GenerateRequestPayload = {
     travelers?: number | null;
     budget?: number | null;
     preferences?: string;
+    llmKey?: string;
+    llmKeyId?: string | null;
 };
 
 type ChatCompletionResponse = {
@@ -57,19 +59,19 @@ type ChatCompletionResponse = {
 };
 
 export async function POST(request: NextRequest) {
-    const apiKey = process.env.LLM_API_KEY ?? process.env.OPENAI_API_KEY;
-
-    if (!apiKey) {
-        return NextResponse.json({ error: '尚未配置 LLM API Key，请在环境变量中设置 LLM_API_KEY。' }, { status: 500 });
-    }
-
     const payload = (await request.json().catch(() => null)) as GenerateRequestPayload | null;
 
     if (!payload) {
         return NextResponse.json({ error: '请求体格式错误。' }, { status: 400 });
     }
 
-    const { destination, startDate, endDate, travelers, budget, preferences } = payload;
+    const { destination, startDate, endDate, travelers, budget, preferences, llmKey } = payload;
+
+    const apiKey = llmKey?.trim();
+
+    if (!apiKey) {
+        return NextResponse.json({ error: '未检测到可用的 LLM API Key，请先在设置页面填写并验证。' }, { status: 400 });
+    }
 
     const trimmedDestination = destination?.trim() ?? '';
     const trimmedPreferences = preferences?.trim() ?? '';

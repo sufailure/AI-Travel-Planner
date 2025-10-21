@@ -4,6 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2, Mic, MicOff, Sparkles } from 'lucide-react';
 import { SPEECH_FALLBACK_MESSAGE, useSpeechRecorder } from '@/lib/client/use-speech-recorder';
+import {
+    API_KEYS_STORAGE_KEY,
+    ACTIVE_LLM_KEY_STORAGE_KEY,
+    loadStoredApiKeys,
+    resolveActiveLlmKeyValue,
+} from '@/lib/client/llm-key-storage';
 import type { PlannerResult, PlannerBudgetEntry } from '@/lib/types/planner';
 import { sanitizeUserPreferences, type UserTravelPreferences } from '@/lib/types/preferences';
 import {
@@ -19,6 +25,11 @@ type GeneratePayload = {
     travelers: number;
     budget: number | null;
     preferences: string;
+};
+
+type GenerateRequestPayload = GeneratePayload & {
+    llmKey: string;
+    llmKeyId: string | null;
 };
 
 type GenerateResponse = {
@@ -142,6 +153,10 @@ export function IntelligentPlanner({ initialPreferences }: IntelligentPlannerPro
     const [isSaving, setIsSaving] = useState(false);
     const [activeItineraryId, setActiveItineraryId] = useState<string | null>(null);
     const [baselineSnapshot, setBaselineSnapshot] = useState<PlannerSnapshot | null>(null);
+    const [hasActiveLlmKey, setHasActiveLlmKey] = useState<boolean | null>(null);
+    const topErrorRef = useRef<HTMLDivElement | null>(null);
+    const missingKeyRef = useRef<HTMLParagraphElement | null>(null);
+    const showMissingKeyNotice = hasActiveLlmKey === false;
 
     const preferencesRef = useRef(preferences);
     const budgetRef = useRef(budget);
@@ -165,6 +180,50 @@ export function IntelligentPlanner({ initialPreferences }: IntelligentPlannerPro
         setPreferenceSnapshot(sanitizedInitialPreferences);
         autoPreferenceText.current = formatPreferenceText(sanitizedInitialPreferences);
     }, [sanitizedInitialPreferences]);
+
+    const refreshActiveLlmKeyStatus = useCallback(() => {
+        if (typeof window === 'undefined') {
+            return;
+        }
+
+        const storedEntries = loadStoredApiKeys();
+        const { value } = resolveActiveLlmKeyValue(storedEntries);
+        setHasActiveLlmKey(Boolean(value));
+    }, []);
+
+    useEffect(() => {
+        refreshActiveLlmKeyStatus();
+
+        if (typeof window === 'undefined') {
+            return;
+        }
+
+        const handleFocus = () => {
+            refreshActiveLlmKeyStatus();
+        };
+
+        const handleStorage = (event: StorageEvent) => {
+            if (!event.key || event.key === API_KEYS_STORAGE_KEY || event.key === ACTIVE_LLM_KEY_STORAGE_KEY) {
+                refreshActiveLlmKeyStatus();
+            }
+        };
+
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible') {
+                refreshActiveLlmKeyStatus();
+            }
+        };
+
+        window.addEventListener('focus', handleFocus);
+        window.addEventListener('storage', handleStorage);
+        document.addEventListener('visibilitychange', handleVisibility);
+
+        return () => {
+            window.removeEventListener('focus', handleFocus);
+            window.removeEventListener('storage', handleStorage);
+            document.removeEventListener('visibilitychange', handleVisibility);
+        };
+    }, [refreshActiveLlmKeyStatus]);
 
     useEffect(() => {
         preferencesRef.current = preferences;
@@ -499,6 +558,18 @@ ${text}` : text));
         return [speechError, formError].filter((message): message is string => Boolean(message));
     }, [speechError, formError]);
 
+    useEffect(() => {
+        const targetNode = showMissingKeyNotice && missingKeyRef.current
+            ? missingKeyRef.current
+            : errorMessages.length > 0
+                ? topErrorRef.current
+                : null;
+
+        if (targetNode) {
+            targetNode.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    }, [showMissingKeyNotice, errorMessages.length, formError, speechError]);
+
     const mapDestination = useMemo(() => {
         const manual = destination.trim();
         if (manual) {
@@ -632,12 +703,28 @@ ${text}` : text));
             setSaveError(null);
 
             try {
+                const storedEntries = loadStoredApiKeys();
+                const { id: activeKeyId, value: activeKeyValue } = resolveActiveLlmKeyValue(storedEntries);
+                setHasActiveLlmKey(Boolean(activeKeyValue));
+
+                if (!activeKeyValue) {
+                    setFormError('请先在「设置」页面配置可用的 LLM API Key。');
+                    setHasActiveLlmKey(false);
+                    return;
+                }
+
+                const requestPayload: GenerateRequestPayload = {
+                    ...payload,
+                    llmKey: activeKeyValue,
+                    llmKeyId: activeKeyId ?? null,
+                };
+
                 const response = await fetch('/api/itineraries/generate', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify(payload),
+                    body: JSON.stringify(requestPayload),
                 });
 
                 if (!response.ok) {
@@ -815,7 +902,7 @@ ${text}` : text));
     }, [handleSavePlan]);
 
     return (
-        <section className="relative flex flex-col gap-5 rounded-3xl border border-emerald-200/70 bg-white/95 p-5 text-sm text-slate-700 shadow-lg shadow-emerald-200/20 dark:border-emerald-500/40 dark:bg-slate-900/70 dark:text-slate-200">
+        <section className="relative flex flex-col gap-5 rounded-3xl border border-emerald-200/70 bg-white/95 p-5 text-sm text-slate-700 shadow-lg shadow-emerald-200/20 dark:border-emerald-500/40 dark:bg-slate-900/70 dark:text-slate-200 xl:max-h-[calc(100vh-7rem)] xl:overflow-y-auto xl:pr-4">
             <div className="pointer-events-none absolute -top-16 right-0 h-40 w-40 rounded-full bg-emerald-300/25 blur-3xl dark:bg-emerald-500/20" />
             <header className="relative flex flex-col gap-2">
                 <span className="inline-flex items-center gap-2 self-start rounded-full bg-emerald-100 px-3 py-1 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200">
@@ -824,11 +911,21 @@ ${text}` : text));
                 </span>
                 <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">快速录入旅行需求</h2>
                 <p className="text-xs text-slate-600 dark:text-slate-400">
-                    支持文字与语音描述，填写越完整，生成的行程越贴近预期。
+                    支持文字与语音描述，填写越完整，生成的行程越贴近预期。例如：“我想去日本，5 天，预算 1 万元，喜欢美食和动漫，带孩子”
                 </p>
             </header>
 
             <form onSubmit={handleSubmit} className="relative grid gap-4 text-xs font-medium">
+                {errorMessages.length > 0 && (
+                    <div
+                        ref={topErrorRef}
+                        className="space-y-1 rounded-xl border border-amber-300/60 bg-amber-50/80 px-4 py-2 text-[11px] text-amber-700 dark:border-amber-400/60 dark:bg-amber-500/10 dark:text-amber-200"
+                    >
+                        {errorMessages.map((message, index) => (
+                            <p key={`${message}-${index}`}>{message}</p>
+                        ))}
+                    </div>
+                )}
                 <label className="flex flex-col gap-2 text-slate-700 dark:text-slate-200">
                     目的地
                     <input
@@ -971,13 +1068,13 @@ ${text}` : text));
                     </button>
                     <span className="text-slate-500 dark:text-slate-400">生成后将在中央面板展示</span>
                 </div>
-
-                {errorMessages.length > 0 && (
-                    <div className="space-y-1 rounded-xl border border-amber-300/60 bg-amber-50/80 px-4 py-2 text-[11px] text-amber-700 dark:border-amber-400/60 dark:bg-amber-500/10 dark:text-amber-200">
-                        {errorMessages.map((message, index) => (
-                            <p key={`${message}-${index}`}>{message}</p>
-                        ))}
-                    </div>
+                {showMissingKeyNotice && (
+                    <p
+                        ref={missingKeyRef}
+                        className="rounded-xl border border-amber-300/60 bg-amber-50/80 px-4 py-2 text-[11px] font-normal text-amber-700 dark:border-amber-400/60 dark:bg-amber-500/10 dark:text-amber-200"
+                    >
+                        请先前往「设置」页面配置可用的 LLM API Key。
+                    </p>
                 )}
             </form>
         </section>
