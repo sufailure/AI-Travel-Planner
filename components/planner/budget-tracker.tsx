@@ -225,7 +225,7 @@ export function BudgetTracker({ itineraryId }: BudgetTrackerProps) {
                 </p>
             </header>
 
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="flex flex-col gap-3">
                 <BudgetSummaryCard
                     label="计划预算"
                     amount={totals.plan}
@@ -308,7 +308,7 @@ export function BudgetTracker({ itineraryId }: BudgetTrackerProps) {
                             className="form-input"
                         />
                     </label>
-                    <label className="flex flex-col gap-1 text-xs font-medium text-slate-600 dark:text-slate-300">
+                    <label className="flex flex-col gap-1 text-xs font-medium text-slate-600 dark:text-slate-300 sm:col-span-1 sm:col-start-1">
                         记录类型
                         <select
                             value={form.source}
@@ -321,13 +321,13 @@ export function BudgetTracker({ itineraryId }: BudgetTrackerProps) {
                             <option value="actual">实际支出</option>
                         </select>
                     </label>
-                    <label className="flex flex-col gap-1 text-xs font-medium text-slate-600 dark:text-slate-300">
+                    <label className="flex flex-col gap-1 text-xs font-medium text-slate-600 dark:text-slate-300 sm:col-span-2">
                         发生日期（可选）
                         <input
                             type="date"
                             value={form.incurredOn}
                             onChange={(event) => setForm((prev) => ({ ...prev, incurredOn: event.target.value }))}
-                            className="form-input"
+                            className="form-input text-xs sm:text-sm"
                         />
                     </label>
                 </div>
@@ -420,8 +420,8 @@ function BudgetSummaryCard({ label, amount, icon, highlight, currency }: BudgetS
                     : 'bg-rose-500/10 text-rose-600';
 
     return (
-        <div className={`flex flex-col gap-3 rounded-2xl border border-slate-200/70 bg-white/80 p-4 shadow-sm dark:border-slate-700/60 dark:bg-slate-800/40`}>
-            <span className={`inline-flex w-fit items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${accentClass}`}>
+        <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200/70 bg-white/80 px-4 py-3 shadow-sm dark:border-slate-700/60 dark:bg-slate-800/40">
+            <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${accentClass}`}>
                 {icon}
                 {label}
             </span>

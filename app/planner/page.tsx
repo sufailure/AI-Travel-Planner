@@ -1,8 +1,8 @@
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { Headphones, Map, Sparkles } from 'lucide-react';
+import { Headphones, Sparkles } from 'lucide-react';
 import { BudgetTracker } from '@/components/planner/budget-tracker';
 import { IntelligentPlanner } from '@/components/planner/intelligent-planner';
+import { PlannerAIOverview } from '@/components/planner/ai-overview';
 import { PreferencesPanel } from '@/components/planner/preferences-panel';
 import { PlannerItineraryDrawer } from '@/components/planner/itinerary-drawer';
 import { PageBackground } from '@/components/layout/page-background';
@@ -65,41 +65,12 @@ export default async function PlannerPage() {
                 </div>
             </header>
 
-            <section className="grid gap-10 xl:grid-cols-[minmax(0,1.1fr),minmax(260px,320px)]">
-                <IntelligentPlanner initialPreferences={initialPreferences} />
-                <div className="flex flex-col gap-6">
-                    <div className="rounded-3xl border border-slate-200/80 bg-white/85 p-6 text-sm text-slate-600 shadow-lg shadow-slate-200/30 backdrop-blur dark:border-slate-700/60 dark:bg-slate-900/70 dark:text-slate-300">
-                        <div className="flex items-start gap-3">
-                            <span className="mt-1 flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-200">
-                                <Map className="h-4 w-4" aria-hidden />
-                            </span>
-                            <div className="flex flex-col gap-1">
-                                <strong className="text-sm text-slate-900 dark:text-slate-100">最近的行程草稿</strong>
-                                <p className="text-xs text-slate-500 dark:text-slate-400">
-                                    {latestItinerary
-                                        ? formatItinerarySummary(latestItinerary.destination, latestItinerary.start_date, latestItinerary.end_date)
-                                        : '暂无已保存的行程，生成完成后会出现在下方列表。'}
-                                </p>
-                            </div>
-                        </div>
-                        <div className="mt-5 rounded-2xl border border-slate-200/60 bg-slate-50/80 p-4 dark:border-slate-700/60 dark:bg-slate-800/40">
-                            <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
-                                <Sparkles className="h-4 w-4" aria-hidden />
-                                如何描述更精准？
-                            </h2>
-                            <ul className="mt-3 space-y-2 text-xs text-slate-600 dark:text-slate-300">
-                                <li>· 指定出发地与目的地，例如“上海到札幌”</li>
-                                <li>· 给出人数、预算与偏好（亲子、美食、徒步等）</li>
-                                <li>· 额外需求：是否需要签证提醒、无障碍、夜生活推荐</li>
-                            </ul>
-                        </div>
-                        <Link
-                            href="/"
-                            className="mt-5 inline-flex items-center justify-center rounded-full border border-slate-300/70 px-4 py-2 text-xs font-semibold text-slate-600 transition hover:border-emerald-400 hover:text-emerald-500 dark:border-slate-700/60 dark:text-slate-200 dark:hover:border-emerald-400/70 dark:hover:text-emerald-200"
-                        >
-                            返回首页查看概览
-                        </Link>
-                    </div>
+            <section className="grid gap-8 xl:grid-cols-[minmax(240px,2fr)_minmax(0,4fr)_minmax(240px,2fr)]">
+                <div className="xl:sticky xl:top-28 xl:h-fit xl:max-w-[320px]">
+                    <IntelligentPlanner initialPreferences={initialPreferences} />
+                </div>
+                <PlannerAIOverview />
+                <div className="flex flex-col gap-6 xl:sticky xl:top-28 xl:h-fit xl:max-w-[320px]">
                     <PreferencesPanel initialPreferences={initialPreferences} />
                     <BudgetTracker itineraryId={latestItinerary?.id ?? null} />
                 </div>
@@ -108,36 +79,4 @@ export default async function PlannerPage() {
             <PlannerItineraryDrawer itineraries={itineraries} />
         </main>
     );
-}
-
-function formatItinerarySummary(destination?: string | null, start?: string | null, end?: string | null) {
-    const place = destination?.trim() || '未命名目的地';
-    const range = formatDateRange(start, end);
-    return range ? `${place} · ${range}` : place;
-}
-
-function formatDateRange(start?: string | null, end?: string | null) {
-    if (!start) {
-        return '';
-    }
-
-    const startDate = parseDate(start);
-    const endDate = end ? parseDate(end) : null;
-    if (!startDate) {
-        return '';
-    }
-
-    const formatter = new Intl.DateTimeFormat('zh-CN', {
-        month: 'numeric',
-        day: 'numeric',
-    });
-
-    const startLabel = formatter.format(startDate);
-    const endLabel = endDate ? formatter.format(endDate) : '';
-    return endLabel ? `${startLabel} - ${endLabel}` : `${startLabel} 出发`;
-}
-
-function parseDate(value: string) {
-    const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? null : date;
 }
