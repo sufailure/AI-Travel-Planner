@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState, useTransition } from 'react';
+import type { MouseEvent, KeyboardEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { CalendarRange, MapPin, Trash2, Users, Wallet2 } from 'lucide-react';
 import type { Database } from '@/lib/supabase/types';
@@ -9,6 +10,8 @@ type Itinerary = Database['public']['Tables']['itineraries']['Row'];
 
 type ItineraryListProps = {
     itineraries: Itinerary[];
+    onSelect?: (itinerary: Itinerary) => void | Promise<void>;
+    selectedId?: string | null;
 };
 
 type PendingDeletion = {
@@ -22,11 +25,11 @@ const dateFormatter = new Intl.DateTimeFormat('zh-CN', {
 
 const emptyState = {
     title: '暂无行程',
-    description: '使用右侧表单创建你的第一份旅行计划，AI 将根据你的偏好推荐交通、酒店与活动。',
+    description: '使用智能规划器创建你的第一份旅行计划，AI 将根据你的偏好推荐交通、酒店与活动。',
     footer: '创建设备同步、费用追踪与语音助手功能将在后续版本陆续开放，敬请期待。',
 };
 
-export function ItineraryList({ itineraries }: ItineraryListProps) {
+export function ItineraryList({ itineraries, onSelect, selectedId }: ItineraryListProps) {
     const router = useRouter();
     const [isPending, startTransition] = useTransition();
     const [pendingDeletion, setPendingDeletion] = useState<PendingDeletion | null>(null);
@@ -52,7 +55,8 @@ export function ItineraryList({ itineraries }: ItineraryListProps) {
         );
     }
 
-    const handleDelete = (itinerary: Itinerary) => {
+    const handleDelete = (event: MouseEvent<HTMLButtonElement>, itinerary: Itinerary) => {
+        event.stopPropagation();
         if (!itinerary.id) {
             return;
         }
@@ -86,6 +90,13 @@ export function ItineraryList({ itineraries }: ItineraryListProps) {
         setErrorMessage(null);
     };
 
+    const handleSelect = (itinerary: Itinerary) => {
+        if (!onSelect) {
+            return;
+        }
+        void onSelect(itinerary);
+    };
+
     return (
         <div className="flex flex-col gap-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -99,7 +110,20 @@ export function ItineraryList({ itineraries }: ItineraryListProps) {
                 {sortedItineraries.map((itinerary) => (
                     <li
                         key={itinerary.id}
-                        className="group relative overflow-hidden rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm transition hover:border-emerald-300/60 hover:shadow-lg hover:shadow-emerald-200/20 dark:border-slate-800/80 dark:bg-gradient-to-br dark:from-slate-900/80 dark:via-slate-900/50 dark:to-slate-900/80 dark:hover:border-emerald-400/60 dark:hover:shadow-emerald-500/10"
+                        role={onSelect ? 'button' : undefined}
+                        aria-pressed={onSelect ? selectedId === itinerary.id : undefined}
+                        tabIndex={onSelect ? 0 : undefined}
+                        onClick={() => handleSelect(itinerary)}
+                        onKeyDown={(event: KeyboardEvent<HTMLLIElement>) => {
+                            if ((event.key === 'Enter' || event.key === ' ') && onSelect) {
+                                event.preventDefault();
+                                handleSelect(itinerary);
+                            }
+                        }}
+                        className={`group relative overflow-hidden rounded-3xl border bg-white p-6 shadow-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400 dark:bg-gradient-to-br dark:from-slate-900/80 dark:via-slate-900/50 dark:to-slate-900/80 ${selectedId === itinerary.id
+                                ? 'border-emerald-400/70 shadow-lg shadow-emerald-200/30 dark:border-emerald-400/70 dark:shadow-emerald-500/15'
+                                : 'border-slate-200/80 hover:border-emerald-300/60 hover:shadow-lg hover:shadow-emerald-200/20 dark:border-slate-800/80 dark:hover:border-emerald-400/60 dark:hover:shadow-emerald-500/10'
+                            }`}
                     >
                         <div className="pointer-events-none absolute -right-20 top-0 h-52 w-52 rounded-full bg-emerald-500/5 blur-3xl transition group-hover:bg-emerald-500/15 dark:bg-emerald-500/10 dark:group-hover:bg-emerald-500/20" />
                         <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -134,7 +158,7 @@ export function ItineraryList({ itineraries }: ItineraryListProps) {
                             </div>
                             <button
                                 type="button"
-                                onClick={() => handleDelete(itinerary)}
+                                onClick={(event) => handleDelete(event, itinerary)}
                                 className="inline-flex items-center justify-center gap-2 self-start rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600 transition hover:border-rose-300 hover:text-rose-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-400 dark:border-slate-700 dark:text-slate-300 dark:hover:border-rose-400/80 dark:hover:text-rose-300 dark:focus-visible:outline-rose-300"
                             >
                                 <Trash2 className="h-3.5 w-3.5" aria-hidden />

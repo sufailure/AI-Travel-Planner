@@ -22,6 +22,18 @@ type GenerateResponse = {
     raw: string;
 };
 
+type PlannerShowItineraryDetail = {
+    id: string;
+    destination?: string | null;
+    startDate?: string | null;
+    endDate?: string | null;
+    travelers?: number | null;
+    budget?: number | null;
+    preferences?: string | null;
+    plan?: unknown;
+    rawPlan?: string | null;
+};
+
 function formatPreferenceText(preferences: UserTravelPreferences | null) {
     if (!preferences) {
         return '';
@@ -210,6 +222,72 @@ export function IntelligentPlanner({ initialPreferences }: IntelligentPlannerPro
 
         return () => {
             window.removeEventListener('user-preferences-updated', listener as EventListener);
+        };
+    }, []);
+
+    useEffect(() => {
+        const handler = (event: Event) => {
+            const detail = (event as CustomEvent<PlannerShowItineraryDetail>).detail;
+            if (!detail) {
+                return;
+            }
+
+            setIsSubmitting(false);
+            setIsSaving(false);
+            setSaveMessage(null);
+            setSaveError(null);
+            setFormError(null);
+
+            const destinationValue = typeof detail.destination === 'string' ? detail.destination.trim() : '';
+            setDestination(destinationValue);
+
+            const startValue = typeof detail.startDate === 'string' ? detail.startDate : '';
+            const endValue = typeof detail.endDate === 'string' ? detail.endDate : '';
+            setStartDate(startValue);
+            setEndDate(endValue);
+
+            if (typeof detail.travelers === 'number' && Number.isFinite(detail.travelers) && detail.travelers > 0) {
+                const travelerCount = Math.max(1, Math.round(detail.travelers));
+                setTravelers(travelerCount);
+            }
+
+            if (typeof detail.budget === 'number' && Number.isFinite(detail.budget)) {
+                setBudget(String(detail.budget));
+            } else if (detail.budget === null) {
+                setBudget('');
+            }
+
+            if (typeof detail.preferences === 'string') {
+                setPreferences(detail.preferences.trim());
+            } else if (detail.preferences === null) {
+                setPreferences('');
+            }
+
+            if (detail.plan && isPlannerResult(detail.plan)) {
+                setResult(detail.plan);
+            } else {
+                setResult(null);
+            }
+
+            setRawPlan(detail.rawPlan ?? null);
+
+            setLastUsedDetails({
+                destination: destinationValue,
+                startDate: startValue,
+                endDate: endValue,
+                travelers:
+                    typeof detail.travelers === 'number' && Number.isFinite(detail.travelers) && detail.travelers > 0
+                        ? Math.max(1, Math.round(detail.travelers))
+                        : travelersRef.current,
+                budget:
+                    typeof detail.budget === 'number' && Number.isFinite(detail.budget) ? detail.budget : null,
+                preferences: detail.preferences ?? preferencesRef.current,
+            });
+        };
+
+        window.addEventListener('planner-show-itinerary', handler as EventListener);
+        return () => {
+            window.removeEventListener('planner-show-itinerary', handler as EventListener);
         };
     }, []);
 
@@ -574,236 +652,248 @@ ${text}` : text));
                 </p>
             </header>
 
-            <form onSubmit={handleSubmit} className="relative mt-6 grid gap-4">
-                <div className="grid gap-4 sm:grid-cols-2">
-                    <label className="flex flex-col gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
-                        目的地
-                        <input
-                            type="text"
-                            value={destination}
-                            onChange={(event) => setDestination(event.target.value)}
-                            placeholder="日本 · 东京"
-                            className="form-input"
-                        />
-                    </label>
-                    <label className="flex flex-col gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
-                        预算（人民币）
-                        <input
-                            type="number"
-                            min={0}
-                            value={budget}
-                            onChange={(event) => setBudget(event.target.value)}
-                            placeholder="10000"
-                            className="form-input"
-                        />
-                    </label>
-                </div>
+            <div className="relative mt-6 grid gap-6 lg:grid-cols-[minmax(320px,360px),minmax(0,1fr)]">
+                <div className="flex flex-col">
+                    <form onSubmit={handleSubmit} className="grid gap-4">
+                        <div className="grid gap-4 sm:grid-cols-2">
+                            <label className="flex flex-col gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+                                目的地
+                                <input
+                                    type="text"
+                                    value={destination}
+                                    onChange={(event) => setDestination(event.target.value)}
+                                    placeholder="日本 · 东京"
+                                    className="form-input"
+                                />
+                            </label>
+                            <label className="flex flex-col gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+                                预算（人民币）
+                                <input
+                                    type="number"
+                                    min={0}
+                                    value={budget}
+                                    onChange={(event) => setBudget(event.target.value)}
+                                    placeholder="10000"
+                                    className="form-input"
+                                />
+                            </label>
+                        </div>
 
-                <div className="grid gap-4 sm:grid-cols-2">
-                    <label className="flex flex-col gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
-                        出发日期
-                        <input
-                            type="date"
-                            value={startDate}
-                            onChange={(event) => setStartDate(event.target.value)}
-                            className="form-input"
-                        />
-                    </label>
-                    <label className="flex flex-col gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
-                        结束日期
-                        <input
-                            type="date"
-                            value={endDate}
-                            onChange={(event) => setEndDate(event.target.value)}
-                            className="form-input"
-                        />
-                    </label>
-                </div>
+                        <div className="grid gap-4 sm:grid-cols-2">
+                            <label className="flex flex-col gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+                                出发日期
+                                <input
+                                    type="date"
+                                    value={startDate}
+                                    onChange={(event) => setStartDate(event.target.value)}
+                                    className="form-input"
+                                />
+                            </label>
+                            <label className="flex flex-col gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+                                结束日期
+                                <input
+                                    type="date"
+                                    value={endDate}
+                                    onChange={(event) => setEndDate(event.target.value)}
+                                    className="form-input"
+                                />
+                            </label>
+                        </div>
 
-                <label className="flex flex-col gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
-                    同行人数
-                    <input
-                        type="number"
-                        min={1}
-                        value={travelers}
-                        onChange={(event) => setTravelers(Number(event.target.value) || 1)}
-                        className="form-input"
-                    />
-                </label>
+                        <label className="flex flex-col gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+                            同行人数
+                            <input
+                                type="number"
+                                min={1}
+                                value={travelers}
+                                onChange={(event) => setTravelers(Number(event.target.value) || 1)}
+                                className="form-input"
+                            />
+                        </label>
 
-                <div className="flex flex-col gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
-                    旅行偏好 / 语音描述
-                    <div className="flex flex-col gap-3">
-                        <textarea
-                            value={preferences}
-                            onChange={(event) => setPreferences(event.target.value)}
-                            placeholder="喜欢美食、动漫体验，需要亲子友好。"
-                            rows={4}
-                            className="form-input resize-none"
-                        />
-                        {(hasDestinationSuggestions || hasInterestSuggestions) && (
-                            <div className="flex flex-col gap-2 rounded-2xl border border-slate-200/70 bg-slate-50/70 p-3 text-xs text-slate-600 dark:border-slate-700/60 dark:bg-slate-800/40 dark:text-slate-300">
-                                {hasDestinationSuggestions && (
-                                    <div className="flex flex-wrap items-center gap-2">
-                                        <span className="font-medium text-slate-500 dark:text-slate-400">常用目的地：</span>
-                                        {destinationSuggestions.map((item) => (
-                                            <button
-                                                key={`destination-${item}`}
-                                                type="button"
-                                                onClick={() => handleApplyDestination(item)}
-                                                className="rounded-full border border-emerald-300/60 px-3 py-1 text-[11px] font-semibold text-emerald-600 transition hover:bg-emerald-50 dark:border-emerald-500/40 dark:text-emerald-200 dark:hover:bg-emerald-500/10"
-                                            >
-                                                {item}
-                                            </button>
-                                        ))}
+                        <div className="flex flex-col gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+                            旅行偏好 / 语音描述
+                            <div className="flex flex-col gap-3">
+                                <textarea
+                                    value={preferences}
+                                    onChange={(event) => setPreferences(event.target.value)}
+                                    placeholder="喜欢美食、动漫体验，需要亲子友好。"
+                                    rows={4}
+                                    className="form-input resize-none"
+                                />
+                                {(hasDestinationSuggestions || hasInterestSuggestions) && (
+                                    <div className="flex flex-col gap-2 rounded-2xl border border-slate-200/70 bg-slate-50/70 p-3 text-xs text-slate-600 dark:border-slate-700/60 dark:bg-slate-800/40 dark:text-slate-300">
+                                        {hasDestinationSuggestions && (
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <span className="font-medium text-slate-500 dark:text-slate-400">常用目的地：</span>
+                                                {destinationSuggestions.map((item) => (
+                                                    <button
+                                                        key={`destination-${item}`}
+                                                        type="button"
+                                                        onClick={() => handleApplyDestination(item)}
+                                                        className="rounded-full border border-emerald-300/60 px-3 py-1 text-[11px] font-semibold text-emerald-600 transition hover:bg-emerald-50 dark:border-emerald-500/40 dark:text-emerald-200 dark:hover:bg-emerald-500/10"
+                                                    >
+                                                        {item}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                        {hasInterestSuggestions && (
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <span className="font-medium text-slate-500 dark:text-slate-400">偏好标签：</span>
+                                                {interestSuggestions.map((item) => (
+                                                    <button
+                                                        key={`interest-${item}`}
+                                                        type="button"
+                                                        onClick={() => handleApplyInterest(item)}
+                                                        className="rounded-full border border-slate-300/70 px-3 py-1 text-[11px] font-semibold text-slate-600 transition hover:border-emerald-400 hover:text-emerald-500 dark:border-slate-600 dark:text-slate-300 dark:hover:border-emerald-500/70 dark:hover:text-emerald-200"
+                                                    >
+                                                        {item}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
                                 )}
-                                {hasInterestSuggestions && (
-                                    <div className="flex flex-wrap items-center gap-2">
-                                        <span className="font-medium text-slate-500 dark:text-slate-400">偏好标签：</span>
-                                        {interestSuggestions.map((item) => (
-                                            <button
-                                                key={`interest-${item}`}
-                                                type="button"
-                                                onClick={() => handleApplyInterest(item)}
-                                                className="rounded-full border border-slate-300/70 px-3 py-1 text-[11px] font-semibold text-slate-600 transition hover:border-emerald-400 hover:text-emerald-500 dark:border-slate-600 dark:text-slate-300 dark:hover:border-emerald-500/70 dark:hover:text-emerald-200"
-                                            >
-                                                {item}
-                                            </button>
-                                        ))}
-                                    </div>
+                                <button
+                                    type="button"
+                                    onClick={handleToggleListening}
+                                    disabled={isSubmitting || isTranscribing}
+                                    className="inline-flex w-fit items-center gap-2 rounded-full border border-slate-300 px-4 py-2 text-xs font-medium text-slate-600 transition hover:border-emerald-400 hover:text-emerald-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:text-slate-300 dark:hover:border-emerald-400/70 dark:hover:text-emerald-300"
+                                >
+                                    {isTranscribing ? (
+                                        <>
+                                            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                                            识别中…
+                                        </>
+                                    ) : isListening ? (
+                                        <>
+                                            <MicOff className="h-4 w-4" aria-hidden />
+                                            停止录音
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Mic className="h-4 w-4" aria-hidden />
+                                            语音输入
+                                        </>
+                                    )}
+                                </button>
+                                {!supportsSpeech && (
+                                    <p className="text-xs text-amber-600 dark:text-amber-300">
+                                        {SPEECH_FALLBACK_MESSAGE}
+                                    </p>
                                 )}
                             </div>
-                        )}
-                        <button
-                            type="button"
-                            onClick={handleToggleListening}
-                            disabled={isSubmitting || isTranscribing}
-                            className="inline-flex w-fit items-center gap-2 rounded-full border border-slate-300 px-4 py-2 text-xs font-medium text-slate-600 transition hover:border-emerald-400 hover:text-emerald-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:text-slate-300 dark:hover:border-emerald-400/70 dark:hover:text-emerald-300"
-                        >
-                            {isTranscribing ? (
-                                <>
-                                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                                    识别中…
-                                </>
-                            ) : isListening ? (
-                                <>
-                                    <MicOff className="h-4 w-4" aria-hidden />
-                                    停止录音
-                                </>
-                            ) : (
-                                <>
-                                    <Mic className="h-4 w-4" aria-hidden />
-                                    语音输入
-                                </>
-                            )}
-                        </button>
-                        {!supportsSpeech && (
-                            <p className="text-xs text-amber-600 dark:text-amber-300">
-                                {SPEECH_FALLBACK_MESSAGE}
-                            </p>
-                        )}
-                    </div>
-                </div>
+                        </div>
 
-                <div className="flex flex-wrap items-center gap-3 text-sm">
-                    <button
-                        type="submit"
-                        disabled={isSubmitting || !canSubmit}
-                        className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 via-emerald-400 to-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:from-emerald-400 hover:via-emerald-300 hover:to-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                        {isSubmitting ? (
-                            <>
-                                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                                生成中…
-                            </>
-                        ) : (
-                            '生成智能行程'
-                        )}
-                    </button>
-                </div>
+                        <div className="flex flex-wrap items-center gap-3 text-sm">
+                            <button
+                                type="submit"
+                                disabled={isSubmitting || !canSubmit}
+                                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 via-emerald-400 to-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:from-emerald-400 hover:via-emerald-300 hover:to-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                {isSubmitting ? (
+                                    <>
+                                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                                        生成中…
+                                    </>
+                                ) : (
+                                    '生成智能行程'
+                                )}
+                            </button>
+                        </div>
 
-                {errorMessages.length > 0 && (
-                    <div className="space-y-1 rounded-xl border border-amber-300/60 bg-amber-50/80 px-4 py-2 text-sm text-amber-700 dark:border-amber-400/60 dark:bg-amber-500/10 dark:text-amber-200">
-                        {errorMessages.map((message, index) => (
-                            <p key={`${message}-${index}`}>{message}</p>
-                        ))}
-                    </div>
-                )}
-            </form>
-
-            {result && (
-                <div className="relative mt-8 rounded-3xl border border-emerald-200 bg-emerald-50/80 p-6 text-slate-700 shadow-sm dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-slate-200">
-                    <h3 className="text-lg font-semibold text-emerald-700 dark:text-emerald-200">AI 行程概览</h3>
-                    <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
-                        <button
-                            type="button"
-                            onClick={handleSavePlan}
-                            disabled={isSaving}
-                            className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                            {isSaving ? (
-                                <>
-                                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                                    保存中…
-                                </>
-                            ) : (
-                                '保存至我的行程'
-                            )}
-                        </button>
-                        {saveMessage && (
-                            <span className="rounded-full bg-white/70 px-3 py-1 text-xs font-medium text-emerald-700 dark:bg-slate-900/50 dark:text-emerald-200">
-                                {saveMessage}
-                            </span>
-                        )}
-                        {saveError && (
-                            <span className="rounded-full bg-white/70 px-3 py-1 text-xs font-medium text-rose-600 dark:bg-slate-900/50 dark:text-rose-300">
-                                {saveError}
-                            </span>
-                        )}
-                    </div>
-                    <ItineraryMap plan={result} destination={mapDestination} />
-                    <p className="mt-2 text-sm leading-relaxed">{result.overview}</p>
-
-                    {result.transportation.length > 0 && (
-                        <SectionList title="交通建议" items={result.transportation} />
-                    )}
-                    {result.accommodations.length > 0 && (
-                        <SectionList title="住宿推荐" items={result.accommodations} />
-                    )}
-                    {result.restaurants.length > 0 && (
-                        <SectionList title="餐饮推荐" items={result.restaurants} />
-                    )}
-
-                    {result.estimatedBudget.length > 0 && (
-                        <div className="mt-6">
-                            <h4 className="text-sm font-semibold text-emerald-700 dark:text-emerald-200">预算估算</h4>
-                            <ul className="mt-2 grid gap-2 text-sm">
-                                {result.estimatedBudget.map((entry, index) => (
-                                    <li key={`${entry.category}-${index}`} className="rounded-xl bg-white/80 px-3 py-2 text-slate-700 shadow-sm dark:bg-slate-800/60 dark:text-slate-200">
-                                        <div className="flex flex-wrap items-center justify-between gap-2">
-                                            <span className="font-medium">{entry.category}</span>
-                                            <span>
-                                                {entry.amount.toLocaleString('zh-CN', {
-                                                    style: 'currency',
-                                                    currency: entry.currency ?? 'CNY',
-                                                })}
-                                            </span>
-                                        </div>
-                                        {entry.notes && <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{entry.notes}</p>}
-                                    </li>
+                        {errorMessages.length > 0 && (
+                            <div className="space-y-1 rounded-xl border border-amber-300/60 bg-amber-50/80 px-4 py-2 text-sm text-amber-700 dark:border-amber-400/60 dark:bg-amber-500/10 dark:text-amber-200">
+                                {errorMessages.map((message, index) => (
+                                    <p key={`${message}-${index}`}>{message}</p>
                                 ))}
-                            </ul>
+                            </div>
+                        )}
+                    </form>
+                </div>
+                <div className="relative flex min-h-[28rem] flex-col rounded-3xl border border-emerald-200/70 bg-emerald-50/80 p-6 text-slate-700 shadow-sm dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-slate-200">
+                    {result ? (
+                        <div className="flex h-full flex-col gap-5">
+                            <div className="flex flex-wrap items-center gap-3 text-sm">
+                                <h3 className="text-lg font-semibold text-emerald-700 dark:text-emerald-200">AI 行程概览</h3>
+                                <button
+                                    type="button"
+                                    onClick={handleSavePlan}
+                                    disabled={isSaving}
+                                    className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-4 py-2 text-[11px] font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                    {isSaving ? (
+                                        <>
+                                            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                                            保存中…
+                                        </>
+                                    ) : (
+                                        '保存至我的行程'
+                                    )}
+                                </button>
+                                {saveMessage && (
+                                    <span className="rounded-full bg-white/70 px-3 py-1 text-[11px] font-medium text-emerald-700 dark:bg-slate-900/50 dark:text-emerald-200">
+                                        {saveMessage}
+                                    </span>
+                                )}
+                                {saveError && (
+                                    <span className="rounded-full bg-white/70 px-3 py-1 text-[11px] font-medium text-rose-600 dark:bg-slate-900/50 dark:text-rose-300">
+                                        {saveError}
+                                    </span>
+                                )}
+                            </div>
+
+                            <div className="space-y-4">
+                                <ItineraryMap plan={result} destination={mapDestination} />
+                                <p className="text-sm leading-relaxed">{result.overview}</p>
+
+                                {result.transportation.length > 0 && (
+                                    <SectionList title="交通建议" items={result.transportation} />
+                                )}
+                                {result.accommodations.length > 0 && (
+                                    <SectionList title="住宿推荐" items={result.accommodations} />
+                                )}
+                                {result.restaurants.length > 0 && (
+                                    <SectionList title="餐饮推荐" items={result.restaurants} />
+                                )}
+
+                                {result.estimatedBudget.length > 0 && (
+                                    <div className="mt-4">
+                                        <h4 className="text-sm font-semibold text-emerald-700 dark:text-emerald-200">预算估算</h4>
+                                        <ul className="mt-2 grid gap-2 text-sm">
+                                            {result.estimatedBudget.map((entry, index) => (
+                                                <li key={`${entry.category}-${index}`} className="rounded-xl bg-white/80 px-3 py-2 text-slate-700 shadow-sm dark:bg-slate-800/60 dark:text-slate-200">
+                                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                                        <span className="font-medium">{entry.category}</span>
+                                                        <span>
+                                                            {entry.amount.toLocaleString('zh-CN', {
+                                                                style: 'currency',
+                                                                currency: entry.currency ?? 'CNY',
+                                                            })}
+                                                        </span>
+                                                    </div>
+                                                    {entry.notes && <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{entry.notes}</p>}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
+
+                                {result.tips.length > 0 && <SectionList title="贴士" items={result.tips} />}
+                                {renderDailyPlan()}
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-sm text-emerald-700/80 dark:text-emerald-200/80">
+                            <p className="text-base font-semibold">生成的行程将在这里展示</p>
+                            <p className="max-w-xs text-xs text-slate-600 dark:text-slate-400">
+                                填写左侧表单或选择已有行程，即可即时查看地图、每日安排与预算分析。
+                            </p>
                         </div>
                     )}
-
-                    {result.tips.length > 0 && (
-                        <SectionList title="贴士" items={result.tips} />
-                    )}
-
-                    {renderDailyPlan()}
                 </div>
-            )}
+            </div>
         </section>
     );
 }
@@ -812,6 +902,64 @@ type SectionListProps = {
     title: string;
     items: string[];
 };
+
+function isPlannerResult(candidate: unknown): candidate is PlannerResult {
+    if (!candidate || typeof candidate !== 'object') {
+        return false;
+    }
+
+    const plan = candidate as PlannerResult;
+    const isStringArray = (value: unknown) => Array.isArray(value) && value.every((item) => typeof item === 'string');
+
+    if (typeof plan.overview !== 'string') {
+        return false;
+    }
+
+    if (!Array.isArray(plan.dailyPlan)) {
+        return false;
+    }
+
+    const validDays = plan.dailyPlan.every(
+        (day) =>
+            day &&
+            typeof day === 'object' &&
+            typeof day.title === 'string' &&
+            typeof day.summary === 'string' &&
+            isStringArray(day.activities) &&
+            isStringArray(day.meals),
+    );
+
+    if (!validDays) {
+        return false;
+    }
+
+    if (!isStringArray(plan.transportation) || !isStringArray(plan.accommodations) || !isStringArray(plan.restaurants)) {
+        return false;
+    }
+
+    if (!Array.isArray(plan.estimatedBudget)) {
+        return false;
+    }
+
+    const validBudget = plan.estimatedBudget.every(
+        (entry) =>
+            entry &&
+            typeof entry === 'object' &&
+            typeof entry.category === 'string' &&
+            typeof entry.amount === 'number' &&
+            typeof entry.currency === 'string',
+    );
+
+    if (!validBudget) {
+        return false;
+    }
+
+    if (!isStringArray(plan.tips)) {
+        return false;
+    }
+
+    return true;
+}
 
 function SectionList({ title, items }: SectionListProps) {
     return (

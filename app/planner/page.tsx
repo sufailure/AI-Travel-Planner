@@ -1,10 +1,10 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Headphones, Map, Sparkles } from 'lucide-react';
-import { ItineraryList } from '@/components/dashboard/itinerary-list';
 import { BudgetTracker } from '@/components/planner/budget-tracker';
 import { IntelligentPlanner } from '@/components/planner/intelligent-planner';
 import { PreferencesPanel } from '@/components/planner/preferences-panel';
+import { PlannerItineraryDrawer } from '@/components/planner/itinerary-drawer';
 import { PageBackground } from '@/components/layout/page-background';
 import { TopNavigation } from '@/components/layout/top-navigation';
 import { createServerClient } from '@/lib/supabase/server';
@@ -65,7 +65,7 @@ export default async function PlannerPage() {
                 </div>
             </header>
 
-            <section className="grid gap-8 lg:grid-cols-[minmax(0,1fr),0.42fr]">
+            <section className="grid gap-8 lg:grid-cols-[minmax(0,1.35fr),0.48fr]">
                 <IntelligentPlanner initialPreferences={initialPreferences} />
                 <div className="flex flex-col gap-6">
                     <div className="rounded-3xl border border-slate-200/80 bg-white/85 p-6 text-sm text-slate-600 shadow-lg shadow-slate-200/30 backdrop-blur dark:border-slate-700/60 dark:bg-slate-900/70 dark:text-slate-300">
@@ -102,9 +102,10 @@ export default async function PlannerPage() {
                     </div>
                     <PreferencesPanel initialPreferences={initialPreferences} />
                     <BudgetTracker itineraryId={latestItinerary?.id ?? null} />
-                    <ItineraryList itineraries={itineraries} />
                 </div>
             </section>
+
+            <PlannerItineraryDrawer itineraries={itineraries} />
         </main>
     );
 }
